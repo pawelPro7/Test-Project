@@ -13,74 +13,106 @@ from utils.viz import zone_heatmap_figure, radar_chart_figure, percentile_scale
 
 pms = load_playermatchstats()
 if pms.empty:
-    st.error("Brak `data/playermatchstats.csv`.")
+    st.error("Missing `data/playermatchstats.csv`.")
     st.stop()
 
 page_header(
-    eyebrow="Kartoteka",
-    title="Zawodnik",
-    subtitle="Wybierz drużynę i zawodnika, aby zobaczyć jego profil, formę i strefy aktywności na boisku.",
+    eyebrow="Directory",
+    title="Player",
+    subtitle="Select a team and player to view their profile, form and activity zones on the pitch.",
 )
 
 sel_col1, sel_col2 = st.columns([1, 2])
-teams = ["Wszystkie drużyny"] + get_teams(pms)
+teams = ["All teams"] + get_teams(pms)
 if "sel_team" not in st.session_state or st.session_state.sel_team not in teams:
-    st.session_state.sel_team = "Wszystkie drużyny"
+    st.session_state.sel_team = "All teams"
 with sel_col1:
-    team_choice = st.selectbox("Drużyna", teams, key="sel_team")
+    team_choice = st.selectbox("Team", teams, key="sel_team")
 
 players = get_players(pms, team_choice)
 if not players:
-    st.warning("Brak zawodników dla wybranej drużyny.")
+    st.warning("No players for the selected team.")
     st.stop()
 if "sel_player" not in st.session_state or st.session_state.sel_player not in players:
     st.session_state.sel_player = players[0]
 with sel_col2:
-    player_choice = st.selectbox("Zawodnik", players, key="sel_player")
+    player_choice = st.selectbox("Player", players, key="sel_player")
 
-player_rows = pms[pms["playerName"] == player_choice].sort_values("dateTime")
-latest = player_rows.iloc[-1]
+player_rows = (
+    pms[pms["playerName"] == player_choice]
+    .sort_values("dateTime")
+    .reset_index(drop=True)
+)
+
+# wybór meczu
+match_options = ["All matches"] + [
+    pd.to_datetime(d).strftime("%Y-%m-%d")
+    for d in player_rows["dateTime"]
+]
+
+selected_match = st.selectbox(
+    "Match",
+    options=match_options,
+    index=len(match_options) - 1,  # default to latest match
+    key="sel_match",
+)
+
+if selected_match == "All matches":
+    selected_rows = player_rows
+    latest = player_rows.iloc[-1]
+else:
+    selected_rows = player_rows[
+        pd.to_datetime(player_rows["dateTime"]).dt.strftime("%Y-%m-%d")
+        == selected_match
+    ]
+    latest = selected_rows.iloc[0]
+
 is_gk = str(latest.get("position")) == "GOALKEEPER"
+
 pos_label = POSITION_LABELS_PL.get(latest.get("position"), latest.get("position"))
 age = int(latest["age"]) if "age" in latest and pd.notna(latest["age"]) else None
-foot = {"LEFT": "Lewa", "RIGHT": "Prawa"}.get(latest.get("leg"), latest.get("leg", "—"))
+foot = {"LEFT": "Left", "RIGHT": "Right"}.get(latest.get("leg"), latest.get("leg", "—"))
 
 st.markdown(f"""
 <div class="player-card">
   <div class="name">{latest['playerName']}</div>
   <div class="meta">{latest['squadName']} &nbsp;·&nbsp; {pos_label} &nbsp;·&nbsp; {latest.get('playerCountry','—')}</div>
   <div style="margin-top:12px;">
-    <span class="tag">Wiek: {age if age is not None else '—'}</span>
-    <span class="tag">Noga: {foot}</span>
-    <span class="tag">Mecze w danych: {len(player_rows)}</span>
-    <span class="tag">Ost. mecz: {pd.to_datetime(latest['dateTime']).strftime('%Y-%m-%d')}</span>
+  <span class="tag">Age: {age if age is not None else '—'}</span>
+  <span class="tag">Foot: {foot}</span>
+  <span class="tag">Matches in data: {len(player_rows)}</span>
+  <span class="tag">Last match: {pd.to_datetime(latest['dateTime']).strftime('%Y-%m-%d')}</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
 st.write("")
-agg = aggregate_player(pms, player_choice)
+if selected_match == "Wszystkie mecze":
+    agg = aggregate_player(pms, player_choice)
+else:
+    agg = aggregate_player(selected_rows, player_choice)
 
 if not is_gk:
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     with k1:
-        st.markdown(kpi_card("Gole", f"{int(agg.get('GOALS', 0))}"), unsafe_allow_html=True)
+        st.markdown(kpi_card("Goals", f"{int(agg.get('GOALS', 0))}"), unsafe_allow_html=True)
     with k2:
-        st.markdown(kpi_card("Asysty", f"{int(agg.get('ASSISTS', 0))}"), unsafe_allow_html=True)
+        st.markdown(kpi_card("Assists", f"{int(agg.get('ASSISTS', 0))}"), unsafe_allow_html=True)
     with k3:
-        st.markdown(kpi_card("Strzały", f"{int(agg.get('SHOT_AT_GOAL_NUMBER', 0))}"), unsafe_allow_html=True)
+        st.markdown(kpi_card("Shots", f"{int(agg.get('SHOT_AT_GOAL_NUMBER', 0))}"), unsafe_allow_html=True)
     with k4:
         st.markdown(kpi_card("Shot xG", f"{agg.get('SHOT_XG', 0):.2f}"), unsafe_allow_html=True)
     with k5:
         st.markdown(kpi_card("Packing xG", f"{agg.get('PACKING_XG', 0):.2f}"), unsafe_allow_html=True)
     with k6:
         pa = agg.get("pass_accuracy_pct", np.nan)
-        st.markdown(kpi_card("Skut. podań", f"{pa:.0f}%" if pd.notna(pa) else "—"), unsafe_allow_html=True)
+        st.markdown(kpi_card("Pass acc", f"{pa:.0f}%" if pd.notna(pa) else "—"), unsafe_allow_html=True)
 else:
-    saves = player_rows["SHOT_AT_GOAL_NUMBER_SAVED"].sum() if "SHOT_AT_GOAL_NUMBER_SAVED" in player_rows else 0
-    conceded = player_rows["CONCEDED_GOALS"].sum() if "CONCEDED_GOALS" in player_rows else 0
-    claims = player_rows["claims"].sum() if "claims" in player_rows else 0
-    catches = player_rows["gk_catches"].sum() if "gk_catches" in player_rows else 0
+    gk_rows = player_rows if selected_match == "Wszystkie mecze" else selected_rows
+    saves = gk_rows["SHOT_AT_GOAL_NUMBER_SAVED"].sum() if "SHOT_AT_GOAL_NUMBER_SAVED" in gk_rows else 0
+    conceded = gk_rows["CONCEDED_GOALS"].sum() if "CONCEDED_GOALS" in gk_rows else 0
+    claims = gk_rows["claims"].sum() if "claims" in gk_rows else 0
+    catches = gk_rows["gk_catches"].sum() if "gk_catches" in gk_rows else 0
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
         st.markdown(kpi_card("Stracone gole", f"{int(conceded)}"), unsafe_allow_html=True)
@@ -112,7 +144,7 @@ with col_left:
         values = percentile_scale(pms, list(radar_cols.values()), latest.to_dict())
         fig = radar_chart_figure(list(radar_cols.keys()), {player_choice: values}, height=380)
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
-        st.caption("Percentyl (0–100) ostatniego meczu na tle wszystkich występów w załadowanych danych.")
+        st.caption("Percentyl (0–100) wybranego meczu na tle wszystkich występów w załadowanych danych.")
     else:
         st.info("Za mało danych do zbudowania profilu.")
 
@@ -121,8 +153,12 @@ with col_right:
     pitch_cols = [f"OFFENSIVE_TOUCHES_IN_PITCH_POSITION_{z}" for z in ZONE_ORDER]
     lane_cols = [f"OFFENSIVE_TOUCHES_IN_LANE_{l}" for l in LANE_ORDER]
     if all(c in player_rows.columns for c in pitch_cols + lane_cols):
-        pitch_counts = player_rows[pitch_cols].sum().tolist()
-        lane_counts = player_rows[lane_cols].sum().tolist()
+        if selected_match == "Wszystkie mecze":
+            pitch_counts = player_rows[pitch_cols].sum().tolist()
+            lane_counts = player_rows[lane_cols].sum().tolist()
+        else:
+            pitch_counts = latest[pitch_cols].tolist()
+            lane_counts = latest[lane_cols].tolist()
         grid = zone_grid_from_marginals(pitch_counts, lane_counts)
         fig = zone_heatmap_figure(grid, [ZONE_LABELS_PL[z] for z in ZONE_ORDER],
                                     [LANE_LABELS_PL[l] for l in LANE_ORDER], height=380)
