@@ -3,7 +3,7 @@ import streamlit as st
 from utils.styling import inject_global_css, COLORS
 
 st.set_page_config(
-    page_title="Analiza Meczowa",
+    page_title="Match Analysis",
     page_icon="⚽",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -23,11 +23,11 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-home = st.Page("views/home.py", title="Przegląd", icon="🏠", default=True)
-player = st.Page("views/player.py", title="Zawodnik", icon="👤")
-team = st.Page("views/team.py", title="Drużyna", icon="🛡️")
-heatmaps = st.Page("views/heatmaps.py", title="Mapy cieplne", icon="🔥")
-comparison = st.Page("views/comparison.py", title="Porównanie", icon="⚔️")
+home = st.Page("views/home.py", title="Overview", icon="🏠", default=True)
+player = st.Page("views/player.py", title="Players", icon="👤")
+team = st.Page("views/team.py", title="Teams", icon="🛡️")
+heatmaps = st.Page("views/heatmaps.py", title="Heatmaps", icon="🔥")
+comparison = st.Page("views/comparison.py", title="Players Comparison", icon="⚔️")
 
 pg = st.navigation({"Menu": [home, player, team, heatmaps, comparison]})
 

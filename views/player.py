@@ -115,45 +115,45 @@ else:
     catches = gk_rows["gk_catches"].sum() if "gk_catches" in gk_rows else 0
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
-        st.markdown(kpi_card("Stracone gole", f"{int(conceded)}"), unsafe_allow_html=True)
+        st.markdown(kpi_card("Goals conceded", f"{int(conceded)}"), unsafe_allow_html=True)
     with k2:
-        st.markdown(kpi_card("Obronione strzały", f"{int(saves)}"), unsafe_allow_html=True)
+        st.markdown(kpi_card("Saves", f"{int(saves)}"), unsafe_allow_html=True)
     with k3:
-        st.markdown(kpi_card("Wyjścia (claims)", f"{int(claims)}"), unsafe_allow_html=True)
+        st.markdown(kpi_card("Claims", f"{int(claims)}"), unsafe_allow_html=True)
     with k4:
-        st.markdown(kpi_card("Złapane piłki", f"{int(catches)}"), unsafe_allow_html=True)
+        st.markdown(kpi_card("Catches", f"{int(catches)}"), unsafe_allow_html=True)
     with k5:
         pa = agg.get("pass_accuracy_pct", np.nan)
-        st.markdown(kpi_card("Skut. podań", f"{pa:.0f}%" if pd.notna(pa) else "—"), unsafe_allow_html=True)
+        st.markdown(kpi_card("Pass acc", f"{pa:.0f}%" if pd.notna(pa) else "—"), unsafe_allow_html=True)
 
 st.write("")
 col_left, col_right = st.columns([1, 1])
 
 with col_left:
-    section_divider("Profil na tle danych")
+    section_divider("Profile vs dataset")
     if is_gk:
-        radar_cols = {"Podania celne": "SUCCESSFUL_PASSES", "Dotknięcia obronne": "DEFENSIVE_TOUCHES",
-                      "Wyjścia": "claims", "Złapane piłki": "gk_catches",
-                      "Interwencje": "SHOT_AT_GOAL_NUMBER_SAVED", "PXT odbiór": "DEF_PXT_BALL_WIN"}
+        radar_cols = {"Successful passes": "SUCCESSFUL_PASSES", "Defensive touches": "DEFENSIVE_TOUCHES",
+                      "Claims": "claims", "Catches": "gk_catches",
+                      "Saves": "SHOT_AT_GOAL_NUMBER_SAVED", "Defensive PXT": "DEF_PXT_BALL_WIN"}
     else:
-        radar_cols = {"Podania celne": "SUCCESSFUL_PASSES", "Dotkn. ofensywne": "OFFENSIVE_TOUCHES",
-                      "Pojedynki (grunt)": "WON_GROUND_DUELS", "Odzyskane piłki": "BALL_WIN_NUMBER",
-                      "Packing xG": "PACKING_XG", "Akcje bramkowe": "SHOT_CREATING_ACTIONS"}
+        radar_cols = {"Successful passes": "SUCCESSFUL_PASSES", "Offensive touches": "OFFENSIVE_TOUCHES",
+                      "Ground duels": "WON_GROUND_DUELS", "Ball wins": "BALL_WIN_NUMBER",
+                      "Packing xG": "PACKING_XG", "Shot creating actions": "SHOT_CREATING_ACTIONS"}
     radar_cols = {k: v for k, v in radar_cols.items() if v in pms.columns}
     if radar_cols:
         values = percentile_scale(pms, list(radar_cols.values()), latest.to_dict())
         fig = radar_chart_figure(list(radar_cols.keys()), {player_choice: values}, height=380)
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
-        st.caption("Percentyl (0–100) wybranego meczu na tle wszystkich występów w załadowanych danych.")
+        st.caption("Percentile (0–100) of the selected match against all performances in the loaded data.")
     else:
-        st.info("Za mało danych do zbudowania profilu.")
+        st.info("Not enough data to build a profile.")
 
 with col_right:
-    section_divider("Strefy aktywności (suma dotknięć)")
+    section_divider("Activity zones (sum of touches)")
     pitch_cols = [f"OFFENSIVE_TOUCHES_IN_PITCH_POSITION_{z}" for z in ZONE_ORDER]
     lane_cols = [f"OFFENSIVE_TOUCHES_IN_LANE_{l}" for l in LANE_ORDER]
     if all(c in player_rows.columns for c in pitch_cols + lane_cols):
-        if selected_match == "Wszystkie mecze":
+        if selected_match == "All matches":
             pitch_counts = player_rows[pitch_cols].sum().tolist()
             lane_counts = player_rows[lane_cols].sum().tolist()
         else:
@@ -163,9 +163,9 @@ with col_right:
         fig = zone_heatmap_figure(grid, [ZONE_LABELS_PL[z] for z in ZONE_ORDER],
                                     [LANE_LABELS_PL[l] for l in LANE_ORDER], height=380)
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
-        st.caption("Przybliżenie na podstawie niezależnych rozkładów strefa × korytarz (patrz strona Mapy cieplne).")
+        st.caption("Approximation based on independent marginal distributions (zone × corridor) — see Heatmaps page.")
     else:
-        st.info("Brak kolumn strefowych w danych.")
+        st.info("No zone columns in the data.")
 
 if len(player_rows) > 1:
     section_divider("Forma w kolejnych meczach")
@@ -186,7 +186,7 @@ if not physical.empty:
     colmap = resolve_columns(physical, PHYSICAL_COLUMN_CANDIDATES)
     name_col = colmap.get("playerName")
     if name_col and player_choice in physical[name_col].values:
-        section_divider("Fizyczność (physical.csv)")
+        section_divider("Physicality (physical.csv)")
         p_rows = physical[physical[name_col] == player_choice]
 
         def avg_of(key, decimals=0):
@@ -201,12 +201,12 @@ if not physical.empty:
         sprints = avg_of("numSprints")
         topspeed = avg_of("topSpeedKmh", 1)
         with f1:
-            st.markdown(kpi_card("Śr. dystans / mecz", f"{dist:,.0f} m" if dist is not None else "—"), unsafe_allow_html=True)
+            st.markdown(kpi_card("Avg distance / match", f"{dist:,.0f} m" if dist is not None else "—"), unsafe_allow_html=True)
         with f2:
-            st.markdown(kpi_card("Śr. dystans HSR", f"{hsr:,.0f} m" if hsr is not None else "—"), unsafe_allow_html=True)
+            st.markdown(kpi_card("Avg HSR distance", f"{hsr:,.0f} m" if hsr is not None else "—"), unsafe_allow_html=True)
         with f3:
-            st.markdown(kpi_card("Śr. liczba sprintów", f"{sprints:,.0f}" if sprints is not None else "—"), unsafe_allow_html=True)
+            st.markdown(kpi_card("Avg sprints", f"{sprints:,.0f}" if sprints is not None else "—"), unsafe_allow_html=True)
         with f4:
-            st.markdown(kpi_card("Najw. prędkość", f"{topspeed} km/h" if topspeed is not None else "—"), unsafe_allow_html=True)
+            st.markdown(kpi_card("Top speed", f"{topspeed} km/h" if topspeed is not None else "—"), unsafe_allow_html=True)
     else:
-        st.caption("Brak danych fizycznych dla tego zawodnika w `physical.csv`.")
+        st.caption("No physical data for this player in `physical.csv`.")

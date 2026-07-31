@@ -9,9 +9,9 @@ pms = load_playermatchstats()
 status = data_status()
 
 page_header(
-    eyebrow="Sezon 25/26 · Panel analityczny",
-    title="Przegląd ligi",
-    subtitle="Statystyki, mapy cieplne i porównania zawodników na podstawie plików z folderu data/.",
+    eyebrow="Season 25/26 · Analytics dashboard",
+    title="League overview",
+    subtitle="Statistics, heatmaps and player comparisons based on files in the data/ folder.",
 )
 
 pill_defs = [
@@ -22,24 +22,23 @@ pill_defs = [
 pills_html = ""
 for name, s in pill_defs:
     cls = "ok" if s["ok"] else "warn"
-    txt = f"{s['rows']} wierszy" if s["ok"] else "brak pliku"
+    txt = f"{s['rows']} rows" if s["ok"] else "missing file"
     pills_html += f'<span class="data-pill {cls}">● {name} — {txt}</span>'
 st.markdown(pills_html, unsafe_allow_html=True)
 st.write("")
 
 if pms.empty:
-    st.error("Nie znaleziono `data/playermatchstats.csv`. Wgraj plik o wymaganej strukturze i odśwież stronę.")
+    st.error("`data/playermatchstats.csv` not found. Upload a file with the required structure and refresh the page.")
     st.stop()
 
 if not status["physical"]["ok"] or not status["events"]["ok"]:
-    with st.expander("ℹ️ Uwaga dot. physical.csv / events.csv — założony schemat danych", expanded=False):
+    with st.expander("ℹ️ Note on physical.csv / events.csv — assumed data schema", expanded=False):
         st.markdown(
-            "Struktura tych dwóch plików nie została jednoznacznie potwierdzona przy budowie aplikacji "
-            "(otrzymane próbki miały identyczną zawartość co playermatchstats.csv), więc loader zakłada "
-            "typowy dla tej klasy danych schemat (fizyczność: dystans, sprinty, prędkość; zdarzenia: typ, "
-            "współrzędne x/y, xG) i dopasowuje kolumny **elastycznie** (bez rozróżniania wielkości liter). "
-            "Podmień pliki w `data/` na swoje pełne eksporty — jeśli nazwy kolumn się różnią, zaktualizuj "
-            "listy kandydatów w `utils/data_loader.py` (`PHYSICAL_COLUMN_CANDIDATES` / `EVENTS_COLUMN_CANDIDATES`)."
+            "The structure of these two files could not be unambiguously confirmed when building the app "
+            "(sample inputs were identical to playermatchstats.csv), so the loader assumes a typical schema "
+            "for this data class (physical: distance, sprints, speed; events: type, x/y coordinates, xG) and "
+            "matches columns flexibly (case-insensitive). Replace the files in `data/` with your full exports — "
+            "if column names differ, update the candidate lists in `utils/data_loader.py` (`PHYSICAL_COLUMN_CANDIDATES` / `EVENTS_COLUMN_CANDIDATES`)."
         )
 
 # ---------------------------------------------------------------- KPI
@@ -52,18 +51,18 @@ pass_acc = pms["pass_accuracy_pct"].mean() if "pass_accuracy_pct" in pms.columns
 
 k1, k2, k3, k4, k5 = st.columns(5)
 with k1:
-    st.markdown(kpi_card("Mecze w danych", f"{n_matches}"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Matches in data", f"{n_matches}"), unsafe_allow_html=True)
 with k2:
-    st.markdown(kpi_card("Zawodnicy", f"{n_players}"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Players", f"{n_players}"), unsafe_allow_html=True)
 with k3:
-    st.markdown(kpi_card("Drużyny", f"{n_teams}"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Teams", f"{n_teams}"), unsafe_allow_html=True)
 with k4:
-    st.markdown(kpi_card("Gole łącznie", f"{total_goals}", f"{avg_xg:.2f} xG / mecz"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Total goals", f"{total_goals}", f"{avg_xg:.2f} xG / match"), unsafe_allow_html=True)
 with k5:
-    st.markdown(kpi_card("Skuteczność podań", f"{pass_acc:.0f}%" if pd.notna(pass_acc) else "—"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Pass accuracy", f"{pass_acc:.0f}%" if pd.notna(pass_acc) else "—"), unsafe_allow_html=True)
 
 st.write("")
-section_divider("Liderzy statystyk")
+section_divider("Stat leaders")
 
 lead_col1, lead_col2, lead_col3 = st.columns(3)
 
@@ -72,41 +71,41 @@ with lead_col1:
                    .query("GOALS > 0").sort_values("GOALS", ascending=False).head(8))
     if not top_scorers.empty:
         fig = px.bar(top_scorers.sort_values("GOALS"), x="GOALS", y="playerName", orientation="h",
-                      title="Najwięcej goli", text="GOALS")
+                      title="Top scorers", text="GOALS")
         fig.update_traces(marker_color=COLORS["accent"], textposition="outside", cliponaxis=False)
         fig.update_layout(yaxis_title="", xaxis_title="")
         apply_plotly_theme(fig, height=320, show_legend=False)
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
     else:
-        st.info("Brak zarejestrowanych goli w danych.")
+        st.info("No goals recorded in the data.")
 
 with lead_col2:
     top_assists = (pms.groupby("playerName", as_index=False)["ASSISTS"].sum()
                    .query("ASSISTS > 0").sort_values("ASSISTS", ascending=False).head(8))
     if not top_assists.empty:
         fig = px.bar(top_assists.sort_values("ASSISTS"), x="ASSISTS", y="playerName", orientation="h",
-                      title="Najwięcej asyst", text="ASSISTS")
+                      title="Most assists", text="ASSISTS")
         fig.update_traces(marker_color=COLORS["accent_3"], textposition="outside", cliponaxis=False)
         fig.update_layout(yaxis_title="", xaxis_title="")
         apply_plotly_theme(fig, height=320, show_legend=False)
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
     else:
-        st.info("Brak zarejestrowanych asyst w danych.")
+        st.info("No assists recorded in the data.")
 
 with lead_col3:
     top_packing = (pms.groupby("playerName", as_index=False)["PACKING_XG"].sum()
                    .sort_values("PACKING_XG", ascending=False).head(8))
     if not top_packing.empty and top_packing["PACKING_XG"].sum() > 0:
         fig = px.bar(top_packing.sort_values("PACKING_XG"), x="PACKING_XG", y="playerName", orientation="h",
-                      title="Packing xG (suma)", text=top_packing.sort_values("PACKING_XG")["PACKING_XG"].round(2))
+                      title="Packing xG (total)", text=top_packing.sort_values("PACKING_XG")["PACKING_XG"].round(2))
         fig.update_traces(marker_color=COLORS["accent_4"], textposition="outside", cliponaxis=False)
         fig.update_layout(yaxis_title="", xaxis_title="")
         apply_plotly_theme(fig, height=320, show_legend=False)
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
     else:
-        st.info("Brak danych Packing xG.")
+        st.info("No Packing xG data.")
 
-section_divider("Ostatnie mecze")
+section_divider("Recent matches")
 
 match_team_goals = pms.groupby(["matchId", "dateTime", "competitionName", "squadName"], as_index=False)["GOALS"].sum()
 rows = []
@@ -122,13 +121,13 @@ for match_id, g in match_team_goals.groupby("matchId"):
         opp_goals = pms.loc[pms["matchId"] == match_id, "OPPONENT_GOALS"]
         opp_txt = f"{int(opp_goals.iloc[0])}" if not opp_goals.empty else "?"
         wynik = f"{a['squadName']} {int(a['GOALS'])} : {opp_txt} (rywal poza zbiorem danych)"
-    rows.append({"Data": dt, "Rozgrywki": comp, "Wynik": wynik})
+    rows.append({"Date": dt, "Competition": comp, "Result": wynik})
 
-matches_table = pd.DataFrame(rows).sort_values("Data", ascending=False)
-matches_table["Data"] = pd.to_datetime(matches_table["Data"]).dt.strftime("%Y-%m-%d %H:%M")
+matches_table = pd.DataFrame(rows).sort_values("Date", ascending=False)
+matches_table["Date"] = pd.to_datetime(matches_table["Date"]).dt.strftime("%Y-%m-%d %H:%M")
 st.dataframe(matches_table, width='stretch', hide_index=True)
 
 st.caption(
-    "Wskazówka: strony **Zawodnik** i **Drużyna** w menu po lewej mają własne pola wyboru, "
-    "a **Mapy cieplne** i **Porównanie** pozwalają zestawić wielu zawodników naraz."
+    "Tip: the **Player** and **Team** pages in the left menu have their own selectors, "
+    "and the **Heatmaps** and **Comparison** pages allow comparing multiple players at once."
 )

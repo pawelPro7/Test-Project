@@ -93,7 +93,7 @@ roster = roster.rename(columns={
     "WON_GROUND_DUELS": "Ground duels (W)", "WON_AERIAL_DUELS": "Aerial duels (W)",
     "BALL_WIN_NUMBER": "Ball wins", "BALL_LOSS_NUMBER": "Ball losses",
 })
-st.dataframe(roster.sort_values("Gole", ascending=False), width='stretch', hide_index=True)
+st.dataframe(roster.sort_values("Goals", ascending=False), width='stretch', hide_index=True)
 
 physical = load_physical()
 if not physical.empty:
