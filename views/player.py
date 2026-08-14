@@ -44,7 +44,7 @@ player_rows = (
     .reset_index(drop=True)
 )
 
-# wybór meczu
+# match selection
 match_options = ["All matches"] + [
     pd.to_datetime(d).strftime("%Y-%m-%d")
     for d in player_rows["dateTime"]
@@ -87,7 +87,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.write("")
-if selected_match == "Wszystkie mecze":
+if selected_match == "All matches":
     agg = aggregate_player(pms, player_choice)
 else:
     agg = aggregate_player(selected_rows, player_choice)
@@ -108,7 +108,7 @@ if not is_gk:
         pa = agg.get("pass_accuracy_pct", np.nan)
         st.markdown(kpi_card("Pass acc", f"{pa:.0f}%" if pd.notna(pa) else "—"), unsafe_allow_html=True)
 else:
-    gk_rows = player_rows if selected_match == "Wszystkie mecze" else selected_rows
+    gk_rows = player_rows if selected_match == "All matches" else selected_rows
     saves = gk_rows["SHOT_AT_GOAL_NUMBER_SAVED"].sum() if "SHOT_AT_GOAL_NUMBER_SAVED" in gk_rows else 0
     conceded = gk_rows["CONCEDED_GOALS"].sum() if "CONCEDED_GOALS" in gk_rows else 0
     claims = gk_rows["claims"].sum() if "claims" in gk_rows else 0
@@ -168,19 +168,19 @@ with col_right:
         st.info("No zone columns in the data.")
 
 if len(player_rows) > 1:
-    section_divider("Forma w kolejnych meczach")
-    metric_label = st.selectbox("Metryka", list(METRIC_LABELS.keys()), index=0, key="player_trend_metric")
+    section_divider("Form over recent matches")
+    metric_label = st.selectbox("Metric", list(METRIC_LABELS.keys()), index=0, key="player_trend_metric")
     metric_col = METRIC_LABELS[metric_label]
     if metric_col in player_rows.columns:
         trend = player_rows[["dateTime", "matchDayIndex", metric_col]].copy()
-        trend["mecz"] = "Kolejka " + trend["matchDayIndex"].astype(str)
-        fig = px.line(trend, x="dateTime", y=metric_col, markers=True, hover_data=["mecz"])
+        trend["match"] = "Matchday " + trend["matchDayIndex"].astype(str)
+        fig = px.line(trend, x="dateTime", y=metric_col, markers=True, hover_data=["match"])
         fig.update_traces(line_color=COLORS["accent"], marker=dict(size=9, color=COLORS["accent"]))
         fig.update_layout(xaxis_title="", yaxis_title=metric_label)
         apply_plotly_theme(fig, height=320, show_legend=False)
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
 
-# ---------------------------------------------------------------- Fizyczność
+# ---------------------------------------------------------------- Physicality
 physical = load_physical()
 if not physical.empty:
     colmap = resolve_columns(physical, PHYSICAL_COLUMN_CANDIDATES)

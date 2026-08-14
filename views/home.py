@@ -115,13 +115,13 @@ for match_id, g in match_team_goals.groupby("matchId"):
     comp = g["competitionName"].iloc[0]
     if len(g) >= 2:
         a, b = g.iloc[0], g.iloc[1]
-        wynik = f"{a['squadName']}  {int(a['GOALS'])} : {int(b['GOALS'])}  {b['squadName']}"
+        result = f"{a['squadName']}  {int(a['GOALS'])} : {int(b['GOALS'])}  {b['squadName']}"
     else:
         a = g.iloc[0]
         opp_goals = pms.loc[pms["matchId"] == match_id, "OPPONENT_GOALS"]
         opp_txt = f"{int(opp_goals.iloc[0])}" if not opp_goals.empty else "?"
-        wynik = f"{a['squadName']} {int(a['GOALS'])} : {opp_txt} (rywal poza zbiorem danych)"
-    rows.append({"Date": dt, "Competition": comp, "Result": wynik})
+        result = f"{a['squadName']} {int(a['GOALS'])} : {opp_txt} (opponent outside the dataset)"
+    rows.append({"Date": dt, "Competition": comp, "Result": result})
 
 matches_table = pd.DataFrame(rows).sort_values("Date", ascending=False)
 matches_table["Date"] = pd.to_datetime(matches_table["Date"]).dt.strftime("%Y-%m-%d %H:%M")

@@ -53,7 +53,7 @@ left, right = st.columns([3, 2])
 with left:
     section_divider("Player rankings")
     metric_label = st.selectbox("Ranking metric", list(METRIC_LABELS.keys()),
-                                  index=list(METRIC_LABELS.keys()).index("Gole"), key="team_rank_metric")
+                                  index=list(METRIC_LABELS.keys()).index("Goals"), key="team_rank_metric")
     metric_col = METRIC_LABELS[metric_label]
     if metric_col in team_df.columns:
         ranking = (team_df.groupby("playerName", as_index=False)[metric_col].sum()

@@ -8,7 +8,7 @@ from utils.viz import radar_chart_figure, percentile_scale
 
 pms = load_playermatchstats()
 if pms.empty:
-    st.error("Brak `data/playermatchstats.csv`.")
+    st.error("Missing `data/playermatchstats.csv`.")
     st.stop()
 
 page_header(
@@ -55,7 +55,7 @@ for name in selected:
         "Player": name,
         "Team": latest.get("squadName"),
         "Position": POSITION_LABELS_PL.get(latest.get("position"), latest.get("position")),
-        "Matches": int(agg.get("MECZE", 0)),
+        "Matches": int(agg.get("MATCHES", 0)),
         "Goals": int(agg.get("GOALS", 0)),
         "Assists": int(agg.get("ASSISTS", 0)),
         "Shot xG": round(float(agg.get("SHOT_XG", 0)), 2),

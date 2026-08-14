@@ -12,7 +12,7 @@ from utils.viz import zone_heatmap_figure, event_heatmap_figure, shot_map_figure
 
 pms = load_playermatchstats()
 if pms.empty:
-    st.error("Brak `data/playermatchstats.csv`.")
+    st.error("Missing `data/playermatchstats.csv`.")
     st.stop()
 
 page_header(
@@ -64,7 +64,7 @@ if available_families and metric_family in available_families:
 else:
     st.info("The loaded playermatchstats.csv file does not contain a complete set of zone columns for any supported metric.")
 
-# ---------------------------------------------------------------- Zdarzenia (prawdziwe x/y)
+# ---------------------------------------------------------------- Events (real x/y)
 events = load_events()
 section_divider("Event map (events.csv)")
 
@@ -75,8 +75,8 @@ else:
     x_col, y_col = colmap.get("x"), colmap.get("y")
     if not x_col or not y_col:
         st.warning(
-            "Nie udało się rozpoznać kolumn współrzędnych (x/y) w events.csv. "
-            "Zmapuj je ręcznie w `utils/data_loader.py` → `EVENTS_COLUMN_CANDIDATES`, jeśli Twój plik używa innych nazw."
+            "Could not identify the coordinate columns (x/y) in events.csv. "
+            "Map them manually in `utils/data_loader.py` → `EVENTS_COLUMN_CANDIDATES` if your file uses different names."
         )
     else:
         e1, e2, e3 = st.columns([1, 1, 1.4])
@@ -98,15 +98,15 @@ else:
                 chosen_types = None
 
         sub = events.copy()
-        if ev_scope == "Zawodnik" and name_col and ev_target:
+        if ev_scope == "Player" and name_col and ev_target:
             sub = sub[sub[name_col] == ev_target]
-        elif ev_scope == "Drużyna" and squad_col and ev_target:
+        elif ev_scope == "Team" and squad_col and ev_target:
             sub = sub[sub[squad_col] == ev_target]
         if type_col and chosen_types is not None:
             sub = sub[sub[type_col].isin(chosen_types)]
 
         if sub.empty:
-            st.info("Brak zdarzeń dla wybranych filtrów.")
+            st.info("No events for the selected filters.")
         else:
             xmax = pd.to_numeric(events[x_col], errors="coerce").max()
             x_norm = normalize_xy(pd.to_numeric(sub[x_col], errors="coerce"), xmax)

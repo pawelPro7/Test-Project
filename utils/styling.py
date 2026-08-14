@@ -1,20 +1,20 @@
 """
-Tozsamosc wizualna aplikacji: "stadion noca / kartka meczowa".
+App visual identity: "stadium at night / matchday sheet".
 
-Paleta:
-  tlo (murawa po zmroku)       #0C1712
-  tlo karty                    #142219
-  tlo karty (hover/elevated)   #1B3024
-  linia (kreda boiska)         #E9E4D6
-  tekst przygaszony            #93A796
-  akcent glowny (tablica wynikow) #F2B705
-  akcent drugi (czerwona kartka)  #E2543D
-  akcent trzeci (reflektory)      #4FA3D1
+Palette:
+  background (turf after dark)      #0C1712
+  card background                   #142219
+  card background (hover/elevated)  #1B3024
+  line (pitch chalk)                #E9E4D6
+  muted text                        #93A796
+  main accent (scoreboard)          #F2B705
+  secondary accent (red card)       #E2543D
+  tertiary accent (floodlights)     #4FA3D1
 
-Typografia:
-  naglowki -> Oswald (skondensowany, "stadionowy")
-  tekst    -> Work Sans
-  liczby / staty -> IBM Plex Mono (efekt "tabeli meczowej")
+Typography:
+  headings -> Oswald (condensed, "stadium" feel)
+  body     -> Work Sans
+  numbers / stats -> IBM Plex Mono ("matchday sheet" effect)
 """
 import streamlit as st
 
@@ -130,7 +130,7 @@ def inject_global_css():
         border-color: {COLORS["border"]};
     }}
 
-    /* ---- wlasne komponenty ---- */
+    /* ---- custom components ---- */
     .pitch-eyebrow {{
         font-family: {FONT_DISPLAY};
         color: {COLORS["accent"]};
@@ -243,7 +243,7 @@ def inject_global_css():
 
 
 def pitch_watermark_svg(height=180, opacity=0.16):
-    """Cienka kreda boiska jako dekoracyjne tlo naglowka - motyw przewodni aplikacji."""
+    """A thin pitch chalk line as a decorative header background - the app's running theme."""
     c = COLORS["line"]
     return f"""
     <div style="position:relative; height:{height}px; margin-bottom:-{height}px; opacity:{opacity}; pointer-events:none;">

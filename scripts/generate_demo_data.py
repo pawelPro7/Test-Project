@@ -1,21 +1,22 @@
 """
-Generator danych demonstracyjnych dla aplikacji Football Analytics.
+Demo data generator for the Football Analytics app.
 
-WAŻNE:
-- Jedyny prawdziwy wiersz danych (Phil Neumann / Birmingham City, matchId 206530)
-  pochodzi bezpośrednio z pliku dostarczonego przez uzytkownika i jest przepisywany
-  BEZ ZMIAN do finalnego playermatchstats.csv.
-- Wszystkie pozostałe wiersze (4 fikcyjne druzyny, fikcyjni zawodnicy, fikcyjne mecze)
-  sa syntetyczne i sluza wylacznie do zaprezentowania dzialania aplikacji. Nie
-  przedstawiaja prawdziwych klubow ani zawodnikow.
-- physical.csv i events.csv NIE zostaly dostarczone w oryginalnej strukturze (uzytkownik
-  przeslal trzykrotnie ten sam plik playermatchstats.csv), wiec ich schemat ponizej to
-  rozsadne, typowe dla branzy zalozenie (patrz README.md). Loader w aplikacji jest
-  napisany obronnie, wiec gdy podmienisz te pliki na prawdziwe eksporty o innych
-  kolumnach, wiekszosc widokow i tak dziala (a to, co wymaga konkretnych kolumn,
-  zglosi to w interfejsie zamiast się wywalic).
+IMPORTANT:
+- The only real data row (Phil Neumann / Birmingham City, matchId 206530)
+  comes directly from the file provided by the user and is copied UNCHANGED
+  into the final playermatchstats.csv.
+- All other rows (4 fictional teams, fictional players, fictional matches)
+  are synthetic and exist solely to demonstrate how the app works. They do
+  not represent real clubs or players.
+- physical.csv and events.csv were NOT provided in their original structure
+  (the user uploaded the same playermatchstats.csv file three times), so the
+  schema below is a reasonable, industry-typical assumption (see README.md).
+  The app's loader is written defensively, so if you replace these files with
+  real exports that use different columns, most views still work (and
+  whatever needs specific columns will report it in the UI instead of
+  crashing).
 
-Uruchomienie:
+Run with:
     python scripts/generate_demo_data.py
 """
 import numpy as np
@@ -30,14 +31,14 @@ DATA_DIR = ROOT / "data"
 REAL_PATH = ROOT / "scripts" / "reference_real_row.csv"
 
 # --------------------------------------------------------------------------------------
-# 1. Wczytanie prawdziwego wiersza i listy kolumn (zeby zachowac dokladnie ten sam schemat)
+# 1. Load the real row and column list (to preserve exactly the same schema)
 # --------------------------------------------------------------------------------------
 real_df = pd.read_csv(REAL_PATH)
 ALL_COLUMNS = list(real_df.columns)
 REAL_ROW = real_df.iloc[0].to_dict()
 
 # --------------------------------------------------------------------------------------
-# 2. Fikcyjne druzyny i sklady
+# 2. Fictional teams and rosters
 # --------------------------------------------------------------------------------------
 TEAMS = [
     {"squadId": 9001, "squadName": "Northgate FC"},
@@ -120,7 +121,7 @@ for squad_id, roster in ROSTERS.items():
 TEAM_BY_ID = {t["squadId"]: t["squadName"] for t in TEAMS}
 
 # --------------------------------------------------------------------------------------
-# 3. Terminarz (round-robin, 3 kolejki) + wspolne wskazniki wg pozycji
+# 3. Fixtures (round-robin, 3 matchdays) + shared per-position rates
 # --------------------------------------------------------------------------------------
 FIXTURES = [
     (1, "2025-08-09T15:00:00Z", 9001, 9002),
@@ -152,7 +153,7 @@ POSITION_PROFILE = {
                                  duel=(3, 11), aer=(2, 9), shots=(1, 5), goal_w=0.38, assist_w=0.14, pack=(0.5, 2.8)),
 }
 
-# udzial stref boiska (OWN_BOX, FIRST_THIRD, MIDDLE_THIRD, FINAL_THIRD, OPPONENT_BOX)
+# share of pitch zones (OWN_BOX, FIRST_THIRD, MIDDLE_THIRD, FINAL_THIRD, OPPONENT_BOX)
 PITCH_BIAS_OFF = {
     "GOALKEEPER":         [0.55, 0.35, 0.10, 0.00, 0.00],
     "CENTRAL_DEFENDER":   [0.12, 0.45, 0.32, 0.10, 0.01],
@@ -161,7 +162,7 @@ PITCH_BIAS_OFF = {
     "WINGER_LEFT":        [0.00, 0.06, 0.26, 0.48, 0.20],
     "CENTER_FORWARD":     [0.00, 0.03, 0.17, 0.48, 0.32],
 }
-# udzial korytarzy (RIGHT_WING, RIGHT_HALF_SPACE, CENTER, LEFT_HALF_SPACE, LEFT_WING)
+# share of lanes (RIGHT_WING, RIGHT_HALF_SPACE, CENTER, LEFT_HALF_SPACE, LEFT_WING)
 LANE_BIAS = {
     "GOALKEEPER":         [0.10, 0.20, 0.40, 0.20, 0.10],
     "CENTRAL_DEFENDER":   [0.10, 0.27, 0.28, 0.25, 0.10],
@@ -181,7 +182,7 @@ PITCH_BIAS_DEF = {
 ZONE_ORDER = ["OWN_BOX", "FIRST_THIRD", "MIDDLE_THIRD", "FINAL_THIRD", "OPPONENT_BOX"]
 LANE_ORDER = ["RIGHT_WING", "RIGHT_HALF_SPACE", "CENTER", "LEFT_HALF_SPACE", "LEFT_WING"]
 
-ATTACK_WEIGHT = {  # waga prawdopodobienstwa strzelenia gola / asysty
+ATTACK_WEIGHT = {  # weight for probability of scoring a goal / assist
     "GOALKEEPER": 0.01, "CENTRAL_DEFENDER": 1.0, "FULLBACK_RIGHT": 1.4,
     "DEFENSIVE_MIDFIELD": 1.6, "WINGER_LEFT": 3.2, "CENTER_FORWARD": 4.2,
 }
@@ -209,9 +210,9 @@ rows_pms, rows_phys, rows_events = [], [], []
 event_id_counter = 1
 
 for md_idx, dt_str, home_id, away_id in FIXTURES:
-    match_id = 900000 + md_idx * 10 + home_id % 10 + away_id % 10  # unikalny, deterministyczny
+    match_id = 900000 + md_idx * 10 + home_id % 10 + away_id % 10  # unique, deterministic
     match_dt = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%SZ")
-    md_name = f"{COMPETITION_NAME} - kolejka {md_idx}"
+    md_name = f"{COMPETITION_NAME} - matchday {md_idx}"
 
     home_goals = int(np.clip(RNG.poisson(1.35), 0, 5))
     away_goals = int(np.clip(RNG.poisson(1.1), 0, 5))
@@ -220,14 +221,14 @@ for md_idx, dt_str, home_id, away_id in FIXTURES:
         roster = ROSTERS[team_id]
         squad_name = TEAM_BY_ID[team_id]
 
-        # -- kto gral ile minut --
+        # -- who played how many minutes --
         player_state = []
         for p in roster:
             starts_full = RNG.random() > 0.18
             share = 1.0 if starts_full else round(float(RNG.uniform(0.15, 0.65)), 2)
             player_state.append({**p, "matchShare": share})
 
-        # -- rozdzielenie goli/asyst w tym meczu dla tej druzyny --
+        # -- distributing goals/assists in this match for this team --
         goals_count = {p["playerId"]: 0 for p in player_state}
         assists_count = {p["playerId"]: 0 for p in player_state}
         weights = np.array([ATTACK_WEIGHT[p["position"]] for p in player_state], dtype=float)
@@ -273,7 +274,7 @@ for md_idx, dt_str, home_id, away_id in FIXTURES:
             shots = int(round(RNG.uniform(*prof["shots"]) * scale))
             goals = goals_count[p["playerId"]]
             assists = assists_count[p["playerId"]]
-            shots = max(shots, goals)  # kto strzelil gola, musial oddac >=1 strzal
+            shots = max(shots, goals)  # whoever scored a goal must have taken >=1 shot
             packing_xg = round(float(RNG.uniform(*prof["pack"]) * scale), 2)
             shot_xg = round(float(max(goals * RNG.uniform(0.28, 0.75), RNG.uniform(0, 0.45) if shots else 0) * scale), 3)
             ball_win = int(RNG.uniform(2, 16) * scale)
@@ -426,7 +427,7 @@ for md_idx, dt_str, home_id, away_id in FIXTURES:
                 event_id_counter += 1
 
 # --------------------------------------------------------------------------------------
-# 4. Zapis plikow (prawdziwy wiersz + syntetyczne, w tej kolejnosci)
+# 4. Save files (real row + synthetic, in that order)
 # --------------------------------------------------------------------------------------
 pms_df = pd.concat([pd.DataFrame([REAL_ROW]), pd.DataFrame(rows_pms)], ignore_index=True)
 pms_df = pms_df[ALL_COLUMNS]
@@ -438,6 +439,6 @@ phys_df.to_csv(DATA_DIR / "physical.csv", index=False)
 events_df = pd.DataFrame(rows_events)
 events_df.to_csv(DATA_DIR / "events.csv", index=False)
 
-print(f"playermatchstats.csv -> {pms_df.shape[0]} wierszy, {pms_df.shape[1]} kolumn")
-print(f"physical.csv         -> {phys_df.shape[0]} wierszy, {phys_df.shape[1]} kolumn")
-print(f"events.csv           -> {events_df.shape[0]} wierszy, {events_df.shape[1]} kolumn")
+print(f"playermatchstats.csv -> {pms_df.shape[0]} rows, {pms_df.shape[1]} columns")
+print(f"physical.csv         -> {phys_df.shape[0]} rows, {phys_df.shape[1]} columns")
+print(f"events.csv           -> {events_df.shape[0]} rows, {events_df.shape[1]} columns")

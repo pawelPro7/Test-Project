@@ -1,14 +1,14 @@
 """
-Wczytywanie i przygotowywanie danych dla aplikacji.
+Data loading and preparation for the app.
 
-playermatchstats.csv ma potwierdzony, dokladny schemat (zweryfikowany na proбce
-dostarczonej przez uzytkownika), wiec odwolujemy sie do jego kolumn wprost.
+playermatchstats.csv has a confirmed, exact schema (verified against the sample
+provided by the user), so we reference its columns directly.
 
-physical.csv i events.csv NIE mialy potwierdzonego schematu w momencie budowy tej
-aplikacji (uzytkownik przeslal ten sam plik trzykrotnie), wiec kazdy dostep do ich
-kolumn przechodzi przez find_column() - elastyczny, nieczuly na wielkosc liter
-"dopasowywacz" kolumn. Jesli podmienisz te pliki na realne eksporty o innych
-nazwach kolumn, wystarczy rozszerzyc listy kandydatow ponizej (sekcja
+physical.csv and events.csv did NOT have a confirmed schema when this app was
+built (the user uploaded the same file three times), so every access to their
+columns goes through find_column() - a flexible, case-insensitive column
+"matcher". If you replace these files with real exports that use different
+column names, just extend the candidate lists below (see
 PHYSICAL_COLUMN_CANDIDATES / EVENTS_COLUMN_CANDIDATES).
 """
 from __future__ import annotations
@@ -23,50 +23,50 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 ZONE_ORDER = ["OWN_BOX", "FIRST_THIRD", "MIDDLE_THIRD", "FINAL_THIRD", "OPPONENT_BOX"]
 ZONE_LABELS_PL = {
-    "OWN_BOX": "Wlasne pole karne", "FIRST_THIRD": "Pierwsza tercja",
-    "MIDDLE_THIRD": "Srodkowa tercja", "FINAL_THIRD": "Ostatnia tercja",
-    "OPPONENT_BOX": "Pole karne rywala",
+    "OWN_BOX": "Own penalty box", "FIRST_THIRD": "First third",
+    "MIDDLE_THIRD": "Middle third", "FINAL_THIRD": "Final third",
+    "OPPONENT_BOX": "Opponent penalty box",
 }
 LANE_ORDER = ["RIGHT_WING", "RIGHT_HALF_SPACE", "CENTER", "LEFT_HALF_SPACE", "LEFT_WING"]
 LANE_LABELS_PL = {
-    "RIGHT_WING": "Prawe skrzydlo", "RIGHT_HALF_SPACE": "Prawy polkanal",
-    "CENTER": "Srodek", "LEFT_HALF_SPACE": "Lewy polkanal", "LEFT_WING": "Lewe skrzydlo",
+    "RIGHT_WING": "Right wing", "RIGHT_HALF_SPACE": "Right half-space",
+    "CENTER": "Center", "LEFT_HALF_SPACE": "Left half-space", "LEFT_WING": "Left wing",
 }
 
 POSITION_LABELS_PL = {
-    "GOALKEEPER": "Bramkarz", "CENTRAL_DEFENDER": "Srodkowy obronca",
-    "FULLBACK_RIGHT": "Prawy obronca", "FULLBACK_LEFT": "Lewy obronca",
-    "DEFENSIVE_MIDFIELD": "Defensywny pomocnik", "CENTRAL_MIDFIELD": "Srodkowy pomocnik",
-    "ATTACKING_MIDFIELD": "Ofensywny pomocnik", "WINGER_RIGHT": "Prawy skrzydlowy",
-    "WINGER_LEFT": "Lewy skrzydlowy", "CENTER_FORWARD": "Napastnik",
+    "GOALKEEPER": "Goalkeeper", "CENTRAL_DEFENDER": "Central defender",
+    "FULLBACK_RIGHT": "Right-back", "FULLBACK_LEFT": "Left-back",
+    "DEFENSIVE_MIDFIELD": "Defensive midfielder", "CENTRAL_MIDFIELD": "Central midfielder",
+    "ATTACKING_MIDFIELD": "Attacking midfielder", "WINGER_RIGHT": "Right winger",
+    "WINGER_LEFT": "Left winger", "CENTER_FORWARD": "Center forward",
 }
 
-# Kluczowe metryki uzywane w interfejsie: etykieta PL -> nazwa kolumny w danych.
+# Key metrics used in the UI: display label -> data column name.
 METRIC_LABELS = {
-    "Gole": "GOALS",
-    "Asysty": "ASSISTS",
+    "Goals": "GOALS",
+    "Assists": "ASSISTS",
     "xG (Shot xG)": "SHOT_XG",
     "Packing xG": "PACKING_XG",
-    "Podania celne": "SUCCESSFUL_PASSES",
-    "Podania niecelne": "UNSUCCESSFUL_PASSES",
-    "Dotkniecia ofensywne": "OFFENSIVE_TOUCHES",
-    "Dotkniecia defensywne": "DEFENSIVE_TOUCHES",
-    "Wygrane pojedynki (grunt)": "WON_GROUND_DUELS",
-    "Przegrane pojedynki (grunt)": "LOST_GROUND_DUELS",
-    "Wygrane pojedynki (powietrze)": "WON_AERIAL_DUELS",
-    "Przegrane pojedynki (powietrze)": "LOST_AERIAL_DUELS",
-    "Strzaly": "SHOT_AT_GOAL_NUMBER",
-    "Odzyskane pilki": "BALL_WIN_NUMBER",
-    "Stracone pilki": "BALL_LOSS_NUMBER",
-    "Ominieci rywale (packing)": "BYPASSED_OPPONENTS",
-    "Ominieci obroncy (packing)": "BYPASSED_DEFENDERS",
-    "PXT - podania": "PXT_PASS",
-    "PXT - drybling": "PXT_DRIBBLE",
-    "PXT - odbior": "PXT_BALL_WIN",
-    "Faule": "NUMBER_OF_FOULS",
-    "Wymuszone faule": "NUMBER_OF_FOULS_WON",
-    "Akcje strzelone/asystowane (SCA)": "SHOT_CREATING_ACTIONS",
-    "Drybling (udany przewoz)": "DRIBBLE_CARRY",
+    "Successful passes": "SUCCESSFUL_PASSES",
+    "Unsuccessful passes": "UNSUCCESSFUL_PASSES",
+    "Offensive touches": "OFFENSIVE_TOUCHES",
+    "Defensive touches": "DEFENSIVE_TOUCHES",
+    "Ground duels won": "WON_GROUND_DUELS",
+    "Ground duels lost": "LOST_GROUND_DUELS",
+    "Aerial duels won": "WON_AERIAL_DUELS",
+    "Aerial duels lost": "LOST_AERIAL_DUELS",
+    "Shots": "SHOT_AT_GOAL_NUMBER",
+    "Ball wins": "BALL_WIN_NUMBER",
+    "Ball losses": "BALL_LOSS_NUMBER",
+    "Bypassed opponents (packing)": "BYPASSED_OPPONENTS",
+    "Bypassed defenders (packing)": "BYPASSED_DEFENDERS",
+    "PXT - passes": "PXT_PASS",
+    "PXT - dribble": "PXT_DRIBBLE",
+    "PXT - ball win": "PXT_BALL_WIN",
+    "Fouls": "NUMBER_OF_FOULS",
+    "Fouls won": "NUMBER_OF_FOULS_WON",
+    "Shot creating actions (SCA)": "SHOT_CREATING_ACTIONS",
+    "Dribble (successful carry)": "DRIBBLE_CARRY",
 }
 
 PHYSICAL_COLUMN_CANDIDATES = {
@@ -105,7 +105,7 @@ EVENTS_COLUMN_CANDIDATES = {
 
 
 def find_column(df: pd.DataFrame, candidates) -> str | None:
-    """Nieczule na wielkosc liter dopasowanie pierwszej pasujacej kolumny z listy kandydatow."""
+    """Case-insensitive match of the first candidate column found in the list."""
     if df is None or df.empty:
         return None
     lower_map = {c.lower(): c for c in df.columns}
@@ -116,7 +116,7 @@ def find_column(df: pd.DataFrame, candidates) -> str | None:
 
 
 def resolve_columns(df: pd.DataFrame, candidates_map: dict) -> dict:
-    """Zwraca {klucz_logiczny: nazwa_kolumny_w_df albo None} dla calej mapy kandydatow."""
+    """Returns {logical_key: column_name_in_df or None} for the whole candidates map."""
     return {key: find_column(df, cands) for key, cands in candidates_map.items()}
 
 
@@ -164,7 +164,7 @@ def load_events() -> pd.DataFrame:
 
 
 def data_status() -> dict:
-    """Krotki raport o tym, co udalo sie wczytac - pokazywany na stronie glownej."""
+    """Short report on what was loaded successfully - shown on the home page."""
     pms, phys, ev = load_playermatchstats(), load_physical(), load_events()
     return {
         "playermatchstats": {"ok": not pms.empty, "rows": len(pms), "cols": pms.shape[1] if not pms.empty else 0},
@@ -182,7 +182,7 @@ def get_teams(df: pd.DataFrame) -> list:
 def get_players(df: pd.DataFrame, team: str | None = None) -> list:
     if df.empty or "playerName" not in df.columns:
         return []
-    sub = df if not team or team == "Wszystkie drużyny" else df[df["squadName"] == team]
+    sub = df if not team or team == "All teams" else df[df["squadName"] == team]
     return sorted(sub["playerName"].dropna().unique().tolist())
 
 
@@ -194,7 +194,7 @@ def player_team(df: pd.DataFrame, player_name: str) -> str | None:
 
 
 def aggregate_player(df: pd.DataFrame, player_name: str) -> pd.Series:
-    """Sumy/srednie dla wszystkich meczow danego zawodnika w zaladowanych danych."""
+    """Sums/averages across all matches of a given player in the loaded data."""
     sub = df[df["playerName"] == player_name]
     if sub.empty:
         return pd.Series(dtype=float)
@@ -204,7 +204,7 @@ def aggregate_player(df: pd.DataFrame, player_name: str) -> pd.Series:
                              "WON_GROUND_DUELS", "LOST_GROUND_DUELS", "WON_AERIAL_DUELS", "LOST_AERIAL_DUELS",
                              "BYPASSED_OPPONENTS", "NUMBER_OF_FOULS", "NUMBER_OF_FOULS_WON"] if c in sub.columns]
     out = sub[sum_cols].sum()
-    out["MECZE"] = len(sub)
+    out["MATCHES"] = len(sub)
     if {"SUCCESSFUL_PASSES", "UNSUCCESSFUL_PASSES"}.issubset(sub.columns):
         tot = out.get("SUCCESSFUL_PASSES", 0) + out.get("UNSUCCESSFUL_PASSES", 0)
         out["pass_accuracy_pct"] = (out["SUCCESSFUL_PASSES"] / tot * 100) if tot > 0 else np.nan
@@ -213,10 +213,11 @@ def aggregate_player(df: pd.DataFrame, player_name: str) -> pd.Series:
 
 def zone_grid_from_marginals(pitch_counts: list, lane_counts: list) -> np.ndarray:
     """
-    Buduje przyblizona siatke 5x5 (strefa x korytarz) na podstawie DWOCH niezaleznych
-    rozkladow brzegowych (bo dane playermatchstats raportuja je osobno, a nie jako
-    jedna wspolna tabele krzyzowa). Zakladamy niezaleznosc obu wymiarow - to przyblizenie,
-    nie dokladny rozklad wspolny, i tak jest to zaznaczone w interfejsie.
+    Builds an approximate 5x5 grid (zone x lane) from TWO independent marginal
+    distributions (because the playermatchstats data reports them separately,
+    not as a single joint cross-table). We assume independence of both
+    dimensions - this is an approximation, not the exact joint distribution,
+    and this is noted as such in the UI.
     """
     pitch = np.array(pitch_counts, dtype=float)
     lane = np.array(lane_counts, dtype=float)

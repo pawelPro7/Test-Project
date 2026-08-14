@@ -1,12 +1,12 @@
 """
-Komponenty wizualne: boisko, mapy cieplne stref, mapy zdarzen (jesli events.csv ma
-wspolrzedne x/y), mapy strzalow oraz wykresy radarowe do porownan zawodnikow.
+Visual components: pitch, zone heatmaps, event maps (if events.csv has x/y
+coordinates), shot maps, and radar charts for player comparisons.
 
-Konwencja wspolrzednych boiska (znormalizowane, niezalezne od jednostek w zrodle):
-  x: 0 (linia wlasnej bramki) -> 100 (linia bramki rywala)
-  y: 0 (jedna linia boczna)  -> 100 (druga linia boczna)
-Jesli events.csv ma inny zakres (np. 0-105 / 0-68 w metrach), dane sa przeskalowywane
-do 0-100 przed rysowaniem - patrz normalize_xy().
+Pitch coordinate convention (normalized, independent of the source units):
+  x: 0 (own goal line) -> 100 (opponent goal line)
+  y: 0 (one touchline)  -> 100 (other touchline)
+If events.csv uses a different range (e.g. 0-105 / 0-68 in meters), the data is
+rescaled to 0-100 before drawing - see normalize_xy().
 """
 import numpy as np
 import plotly.graph_objects as go
@@ -31,7 +31,7 @@ def hex_to_rgba(hex_color: str, alpha: float) -> str:
 
 
 def normalize_xy(series, observed_max):
-    """Skaluje wspolrzedne do zakresu 0-100, jesli zrodlo uzywa np. metrow (0-105/0-68)."""
+    """Scales coordinates to the 0-100 range if the source uses e.g. meters (0-105/0-68)."""
     if observed_max is None or observed_max <= 0:
         return series
     if observed_max <= 101:
@@ -52,22 +52,22 @@ def _pitch_base_shapes():
     def circle(x0, y0, x1, y1, layer="above", width=1.6):
         return dict(type="circle", x0=x0, y0=y0, x1=x1, y1=y1, line=dict(color=line, width=width), layer=layer)
 
-    # murawa (subtelne pasy koszenia)
+    # turf (subtle mowing stripes)
     n_stripes = 10
     for i in range(n_stripes):
         x0, x1 = i * 100 / n_stripes, (i + 1) * 100 / n_stripes
         fill = "#122016" if i % 2 == 0 else "#132419"
         shapes.append(rect(x0, 0, x1, 100, layer="below", width=0, fill=fill))
 
-    # obrys boiska
+    # pitch outline
     shapes.append(rect(0, 0, 100, 100, width=2))
-    # linia polowy
+    # halfway line
     shapes.append(dict(type="line", x0=50, y0=0, x1=50, y1=100, line=dict(color=line, width=2), layer="above"))
-    # kolo srodkowe + punkt
+    # center circle + spot
     r_x, r_y = _m2x(9.15), _m2y(9.15)
     shapes.append(circle(50 - r_x, 50 - r_y, 50 + r_x, 50 + r_y))
 
-    # pola karne / bramkowe (lewe i prawe)
+    # penalty / goal areas (left and right)
     pen_depth, pen_half = _m2x(16.5), _m2y(20.16)
     six_depth, six_half = _m2x(5.5), _m2y(9.16)
     shapes.append(rect(0, 50 - pen_half, pen_depth, 50 + pen_half))
@@ -96,7 +96,7 @@ LANE_Y_BINS = [(0, 20), (20, 37), (37, 63), (63, 80), (80, 100)]
 
 def zone_heatmap_figure(grid: np.ndarray, zone_labels, lane_labels, title=None, height=460,
                          color=COLORS["accent"]):
-    """grid ma ksztalt (5 korytarzy, 5 stref) - patrz data_loader.zone_grid_from_marginals."""
+    """grid has shape (5 lanes, 5 zones) - see data_loader.zone_grid_from_marginals."""
     fig = empty_pitch_figure(height=height, title=title)
     vmax = grid.max() if grid.size and grid.max() > 0 else 1
     hover_x, hover_y, hover_text = [], [], []
@@ -108,7 +108,7 @@ def zone_heatmap_figure(grid: np.ndarray, zone_labels, lane_labels, title=None, 
                            fillcolor=hex_to_rgba(color, alpha), line=dict(width=0), layer="below")
             hover_x.append((x0 + x1) / 2)
             hover_y.append((y0 + y1) / 2)
-            hover_text.append(f"{zone_labels[j]} / {lane_labels[i]}<br>Dotkniecia: <b>{val:.1f}</b>")
+            hover_text.append(f"{zone_labels[j]} / {lane_labels[i]}<br>Touches: <b>{val:.1f}</b>")
     fig.add_trace(go.Scatter(
         x=hover_x, y=hover_y, mode="markers",
         marker=dict(size=46, color="rgba(0,0,0,0)"),
@@ -137,9 +137,9 @@ def event_heatmap_figure(x, y, title=None, height=460, color=COLORS["accent"]):
         fig.add_trace(go.Heatmap(
             x=xc, y=yc, z=grid, zsmooth="best", showscale=False,
             colorscale=[[0, "rgba(0,0,0,0)"], [1, color]],
-            opacity=0.82, hovertemplate="Liczba zdarzen w okolicy: %{z}<extra></extra>",
+            opacity=0.82, hovertemplate="Nearby events: %{z}<extra></extra>",
         ))
-    # przerysuj linie boiska NAD heatmapa
+    # redraw pitch lines OVER the heatmap
     for shp in _pitch_base_shapes():
         if shp.get("layer") == "above":
             fig.add_shape(**shp)
@@ -156,14 +156,14 @@ def shot_map_figure(x, y, xg, is_goal, height=460, title=None):
         x=x, y=y, mode="markers",
         marker=dict(size=sizes, color=colors, line=dict(color=COLORS["bg"], width=1.2), opacity=0.9),
         customdata=np.stack([xg_safe, is_goal], axis=-1),
-        hovertemplate="xG: %{customdata[0]:.2f}<br>Gol: %{customdata[1]}<extra></extra>",
+        hovertemplate="xG: %{customdata[0]:.2f}<br>Goal: %{customdata[1]}<extra></extra>",
         showlegend=False,
     ))
     return fig
 
 
 def radar_chart_figure(categories, series: dict, title=None, height=460):
-    """series: {nazwa_serii: [wartosci_0_100, ...]} - te same kategorie dla kazdej serii."""
+    """series: {series_name: [values_0_100, ...]} - the same categories for each series."""
     fig = go.Figure()
     palette = [COLORS["accent"], COLORS["accent_3"], COLORS["accent_2"], COLORS["accent_4"]]
     for i, (name, values) in enumerate(series.items()):
@@ -190,7 +190,7 @@ def radar_chart_figure(categories, series: dict, title=None, height=460):
 
 
 def percentile_scale(df, cols, player_row):
-    """Zwraca liste wartosci 0-100 (percentyl w obrebie df) dla kazdej kolumny w cols."""
+    """Returns a list of 0-100 values (percentile within df) for each column in cols."""
     out = []
     for c in cols:
         if c not in df.columns or df[c].dropna().empty:
