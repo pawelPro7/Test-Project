@@ -42,7 +42,7 @@ for name in selected:
     latest_rows[name] = rows.iloc[-1]
     series[name] = percentile_scale(pms, list(RADAR_METRICS.values()), rows.iloc[-1].to_dict())
 
-fig = radar_chart_figure(list(RADAR_METRICS.keys()), series, height=520)
+fig = radar_chart_figure(list(RADAR_METRICS.keys()), series, height=520, title="Player profile percentile")
 st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
 st.caption("Each axis is a percentile (0–100) against all performances in the loaded data — not the raw value.")
 

@@ -59,7 +59,8 @@ with left:
         ranking = (team_df.groupby("playerName", as_index=False)[metric_col].sum()
                    .sort_values(metric_col, ascending=False).head(20))
         fig = px.bar(ranking.sort_values(metric_col), x=metric_col, y="playerName", orientation="h",
-                      text=ranking.sort_values(metric_col)[metric_col].round(2))
+                      text=ranking.sort_values(metric_col)[metric_col].round(2),
+                      title=f"{metric_label} — {team_choice}")
         fig.update_traces(marker_color=COLORS["accent"], textposition="outside", cliponaxis=False)
         fig.update_layout(yaxis_title="", xaxis_title=metric_label)
         apply_plotly_theme(fig, height=420, show_legend=False)
@@ -72,7 +73,8 @@ with right:
     if all(c in team_df.columns for c in pitch_cols + lane_cols):
         grid = zone_grid_from_marginals(team_df[pitch_cols].sum().tolist(), team_df[lane_cols].sum().tolist())
         fig = zone_heatmap_figure(grid, [ZONE_LABELS_PL[z] for z in ZONE_ORDER],
-                                    [LANE_LABELS_PL[l] for l in LANE_ORDER], height=420, color=COLORS["accent_3"])
+                                    [LANE_LABELS_PL[l] for l in LANE_ORDER], height=420, color=COLORS["accent_3"],
+                                    title=f"Touches by zone — {team_choice}")
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
     else:
         st.info("No zone columns in the data.")

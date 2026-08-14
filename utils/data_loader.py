@@ -76,15 +76,16 @@ PHYSICAL_COLUMN_CANDIDATES = {
     "squadId": ["squadId", "squad_id", "teamId", "team_id"],
     "squadName": ["squadName", "squad_name", "teamName", "team_name"],
     "position": ["position"],
-    "minutesPlayed": ["minutesPlayed", "minutes_played", "minutes"],
-    "totalDistanceM": ["totalDistanceM", "total_distance", "distance", "totalDistance"],
+    "minutesPlayed": ["minutesPlayed", "minutes_played", "minutes", "minutes_full_all"],
+    "totalDistanceM": ["totalDistanceM", "total_distance", "distance", "totalDistance", "total_distance_full_all"],
     "distancePer90M": ["distancePer90M", "distance_per_90"],
-    "hsrDistanceM": ["hsrDistanceM", "hsr_distance", "highSpeedRunningDistance"],
-    "sprintDistanceM": ["sprintDistanceM", "sprint_distance"],
-    "numSprints": ["numSprints", "num_sprints", "sprints"],
-    "topSpeedKmh": ["topSpeedKmh", "top_speed", "maxSpeed"],
+    "hsrDistanceM": ["hsrDistanceM", "hsr_distance", "highSpeedRunningDistance", "hsr_distance_full_all"],
+    "sprintDistanceM": ["sprintDistanceM", "sprint_distance", "sprint_distance_full_all"],
+    "numSprints": ["numSprints", "num_sprints", "sprints", "sprint_count_full_all"],
+    "topSpeedKmh": ["topSpeedKmh", "top_speed", "maxSpeed", "peak_velocity"],
     "accelerations": ["accelerations", "num_accelerations"],
     "decelerations": ["decelerations", "num_decelerations"],
+    "highIntensityActions": ["highIntensityActions", "high_intensity_actions", "hi_count_full_all"],
 }
 
 EVENTS_COLUMN_CANDIDATES = {
@@ -144,6 +145,16 @@ def load_playermatchstats() -> pd.DataFrame:
     if {"WON_GROUND_DUELS", "LOST_GROUND_DUELS"}.issubset(df.columns):
         total_gd = df["WON_GROUND_DUELS"] + df["LOST_GROUND_DUELS"]
         df["ground_duel_win_pct"] = np.where(total_gd > 0, df["WON_GROUND_DUELS"] / total_gd * 100, np.nan)
+    if {"WON_GROUND_DUELS", "LOST_GROUND_DUELS", "WON_AERIAL_DUELS", "LOST_AERIAL_DUELS"}.issubset(df.columns):
+        won_duels = df["WON_GROUND_DUELS"] + df["WON_AERIAL_DUELS"]
+        total_duels = won_duels + df["LOST_GROUND_DUELS"] + df["LOST_AERIAL_DUELS"]
+        df["duel_success_pct"] = np.where(total_duels > 0, won_duels / total_duels * 100, np.nan)
+    if {"SUCCESSFUL_PASSES_UNDER_PRESSURE", "PASSES_UNDER_PRESSURE"}.issubset(df.columns):
+        df["pass_under_pressure_pct"] = np.where(
+            df["PASSES_UNDER_PRESSURE"] > 0,
+            df["SUCCESSFUL_PASSES_UNDER_PRESSURE"] / df["PASSES_UNDER_PRESSURE"] * 100,
+            np.nan,
+        )
     return df.copy()
 
 

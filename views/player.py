@@ -136,13 +136,19 @@ with col_left:
                       "Claims": "claims", "Catches": "gk_catches",
                       "Saves": "SHOT_AT_GOAL_NUMBER_SAVED", "Defensive PXT": "DEF_PXT_BALL_WIN"}
     else:
-        radar_cols = {"Successful passes": "SUCCESSFUL_PASSES", "Offensive touches": "OFFENSIVE_TOUCHES",
-                      "Ground duels": "WON_GROUND_DUELS", "Ball wins": "BALL_WIN_NUMBER",
-                      "Packing xG": "PACKING_XG", "Shot creating actions": "SHOT_CREATING_ACTIONS"}
+        radar_cols = {
+            "Progressive passing value": "PXT_PASS_PRO",
+            "Passing under pressure": "pass_under_pressure_pct",
+            "Duel success": "duel_success_pct",
+            "Successful dribbles": "DRIBBLE_CARRY_SUCCESS",
+            "Pressing": "NUMBER_OF_PRESSES",
+            "Offensive touches": "OFFENSIVE_TOUCHES",
+        }
     radar_cols = {k: v for k, v in radar_cols.items() if v in pms.columns}
     if radar_cols:
         values = percentile_scale(pms, list(radar_cols.values()), latest.to_dict())
-        fig = radar_chart_figure(list(radar_cols.keys()), {player_choice: values}, height=380)
+        fig = radar_chart_figure(list(radar_cols.keys()), {player_choice: values}, height=380,
+                                   title="Player profile percentile")
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
         st.caption("Percentile (0–100) of the selected match against all performances in the loaded data.")
     else:
@@ -161,7 +167,8 @@ with col_right:
             lane_counts = latest[lane_cols].tolist()
         grid = zone_grid_from_marginals(pitch_counts, lane_counts)
         fig = zone_heatmap_figure(grid, [ZONE_LABELS_PL[z] for z in ZONE_ORDER],
-                                    [LANE_LABELS_PL[l] for l in LANE_ORDER], height=380)
+                                    [LANE_LABELS_PL[l] for l in LANE_ORDER], height=380,
+                                    title="Activity zones — touches")
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
         st.caption("Approximation based on independent marginal distributions (zone × corridor) — see Heatmaps page.")
     else:
@@ -174,7 +181,8 @@ if len(player_rows) > 1:
     if metric_col in player_rows.columns:
         trend = player_rows[["dateTime", "matchDayIndex", metric_col]].copy()
         trend["match"] = "Matchday " + trend["matchDayIndex"].astype(str)
-        fig = px.line(trend, x="dateTime", y=metric_col, markers=True, hover_data=["match"])
+        fig = px.line(trend, x="dateTime", y=metric_col, markers=True, hover_data=["match"],
+                       title=f"{metric_label} by match")
         fig.update_traces(line_color=COLORS["accent"], marker=dict(size=9, color=COLORS["accent"]))
         fig.update_layout(xaxis_title="", yaxis_title=metric_label)
         apply_plotly_theme(fig, height=320, show_legend=False)
@@ -187,26 +195,36 @@ if not physical.empty:
     name_col = colmap.get("playerName")
     if name_col and player_choice in physical[name_col].values:
         section_divider("Physicality (physical.csv)")
+        st.caption("Physical output per 90 minutes; based on matches with valid tracking data.")
         p_rows = physical[physical[name_col] == player_choice]
 
-        def avg_of(key, decimals=0):
+        min_col = colmap.get("minutesPlayed")
+        total_minutes = float(p_rows[min_col].sum()) if min_col and min_col in p_rows.columns else 0.0
+
+        def per90(key):
             c = colmap.get(key)
-            if not c or c not in p_rows.columns:
+            if not c or c not in p_rows.columns or total_minutes <= 0:
                 return None
-            return round(float(p_rows[c].mean()), decimals)
+            return float(p_rows[c].sum()) / total_minutes * 90
+
+        def peak_of(key, decimals=1):
+            c = colmap.get(key)
+            if not c or c not in p_rows.columns or p_rows[c].dropna().empty:
+                return None
+            return round(float(p_rows[c].max()), decimals)
 
         f1, f2, f3, f4 = st.columns(4)
-        dist = avg_of("totalDistanceM")
-        hsr = avg_of("hsrDistanceM")
-        sprints = avg_of("numSprints")
-        topspeed = avg_of("topSpeedKmh", 1)
+        dist90 = per90("totalDistanceM")
+        hsr90 = per90("hsrDistanceM")
+        sprints90 = per90("numSprints")
+        topspeed = peak_of("topSpeedKmh")
         with f1:
-            st.markdown(kpi_card("Avg distance / match", f"{dist:,.0f} m" if dist is not None else "—"), unsafe_allow_html=True)
+            st.markdown(kpi_card("Distance / 90", f"{dist90:,.0f} m" if dist90 is not None else "—"), unsafe_allow_html=True)
         with f2:
-            st.markdown(kpi_card("Avg HSR distance", f"{hsr:,.0f} m" if hsr is not None else "—"), unsafe_allow_html=True)
+            st.markdown(kpi_card("HSR distance / 90", f"{hsr90:,.0f} m" if hsr90 is not None else "—"), unsafe_allow_html=True)
         with f3:
-            st.markdown(kpi_card("Avg sprints", f"{sprints:,.0f}" if sprints is not None else "—"), unsafe_allow_html=True)
+            st.markdown(kpi_card("Sprints / 90", f"{sprints90:,.1f}" if sprints90 is not None else "—"), unsafe_allow_html=True)
         with f4:
-            st.markdown(kpi_card("Top speed", f"{topspeed} km/h" if topspeed is not None else "—"), unsafe_allow_html=True)
+            st.markdown(kpi_card("Peak speed", f"{topspeed} km/h" if topspeed is not None else "—"), unsafe_allow_html=True)
     else:
         st.caption("No physical data for this player in `physical.csv`.")
