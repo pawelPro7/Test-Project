@@ -1,12 +1,9 @@
 """
-Visual components: pitch, zone heatmaps, event maps (if events.csv has x/y
-coordinates), shot maps, and radar charts for player comparisons.
+Visual components: pitch, zone heatmaps, and radar charts for player comparisons.
 
 Pitch coordinate convention (normalized, independent of the source units):
   x: 0 (own goal line) -> 100 (opponent goal line)
   y: 0 (one touchline)  -> 100 (other touchline)
-If events.csv uses a different range (e.g. 0-105 / 0-68 in meters), the data is
-rescaled to 0-100 before drawing - see normalize_xy().
 """
 import numpy as np
 import plotly.graph_objects as go
@@ -28,15 +25,6 @@ def hex_to_rgba(hex_color: str, alpha: float) -> str:
     hex_color = hex_color.lstrip("#")
     r, g, b = tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
     return f"rgba({r},{g},{b},{alpha:.3f})"
-
-
-def normalize_xy(series, observed_max):
-    """Scales coordinates to the 0-100 range if the source uses e.g. meters (0-105/0-68)."""
-    if observed_max is None or observed_max <= 0:
-        return series
-    if observed_max <= 101:
-        return series
-    return series / observed_max * 100
 
 
 def _pitch_base_shapes():
@@ -117,63 +105,37 @@ def zone_heatmap_figure(grid: np.ndarray, zone_labels, lane_labels, title=None, 
     return fig
 
 
-def grid_from_events(x, y, nx=24, ny=16):
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    mask = np.isfinite(x) & np.isfinite(y)
-    x, y = x[mask], y[mask]
-    if len(x) == 0:
-        return np.zeros((ny, nx)), np.linspace(0, 100, nx), np.linspace(0, 100, ny)
-    hist, xedges, yedges = np.histogram2d(x, y, bins=[nx, ny], range=[[0, 100], [0, 100]])
-    xcenters = (xedges[:-1] + xedges[1:]) / 2
-    ycenters = (yedges[:-1] + yedges[1:]) / 2
-    return hist.T, xcenters, ycenters
-
-
-def event_heatmap_figure(x, y, title=None, height=460, color=COLORS["accent"]):
-    fig = empty_pitch_figure(height=height, title=title)
-    grid, xc, yc = grid_from_events(x, y)
-    if grid.max() > 0:
-        fig.add_trace(go.Heatmap(
-            x=xc, y=yc, z=grid, zsmooth="best", showscale=False,
-            colorscale=[[0, "rgba(0,0,0,0)"], [1, color]],
-            opacity=0.82, hovertemplate="Nearby events: %{z}<extra></extra>",
-        ))
-    # redraw pitch lines OVER the heatmap
-    for shp in _pitch_base_shapes():
-        if shp.get("layer") == "above":
-            fig.add_shape(**shp)
-    return fig
-
-
-def shot_map_figure(x, y, xg, is_goal, height=460, title=None):
-    fig = empty_pitch_figure(height=height, title=title)
-    x, y, xg, is_goal = map(np.asarray, (x, y, xg, is_goal))
-    xg_safe = np.nan_to_num(xg, nan=0.05)
-    sizes = 10 + 40 * np.clip(xg_safe, 0, 1)
-    colors = [COLORS["accent"] if g else COLORS["text_muted"] for g in is_goal]
-    fig.add_trace(go.Scatter(
-        x=x, y=y, mode="markers",
-        marker=dict(size=sizes, color=colors, line=dict(color=COLORS["bg"], width=1.2), opacity=0.9),
-        customdata=np.stack([xg_safe, is_goal], axis=-1),
-        hovertemplate="xG: %{customdata[0]:.2f}<br>Goal: %{customdata[1]}<extra></extra>",
-        showlegend=False,
-    ))
-    return fig
-
-
-def radar_chart_figure(categories, series: dict, title=None, height=460):
-    """series: {series_name: [values_0_100, ...]} - the same categories for each series."""
+def radar_chart_figure(categories, series: dict, title=None, height=460, hover_texts: dict = None):
+    """series: {series_name: [values_0_100, ...]} - the same categories for each series.
+    hover_texts (optional): {series_name: [hover_string, ...]} matching categories 1:1 - when
+    given for a series, that trace gets a custom per-vertex hover tooltip instead of the default
+    "categoryname = value" hover. The visible vertex markers stay small; a second, invisible
+    trace with much larger markers carries the actual hover target, so hovering is easy without
+    making the visible dots big (same pattern as the transparent hover markers in
+    zone_heatmap_figure).
+    """
     fig = go.Figure()
     palette = [COLORS["accent"], COLORS["accent_3"], COLORS["accent_2"], COLORS["accent_4"]]
     for i, (name, values) in enumerate(series.items()):
         vals = list(values) + [values[0]]
         cats = list(categories) + [categories[0]]
         col = palette[i % len(palette)]
-        fig.add_trace(go.Scatterpolar(
+        trace_kwargs = dict(
             r=vals, theta=cats, name=name, fill="toself",
             line=dict(color=col, width=2), fillcolor=hex_to_rgba(col, 0.18),
-        ))
+        )
+        if hover_texts and name in hover_texts:
+            texts = list(hover_texts[name])
+            texts = texts + [texts[0]]
+            trace_kwargs.update(mode="lines+markers", marker=dict(size=6, color=col))
+            fig.add_trace(go.Scatterpolar(**trace_kwargs))
+            fig.add_trace(go.Scatterpolar(
+                r=vals, theta=cats, mode="markers",
+                marker=dict(size=30, color="rgba(0,0,0,0)"),
+                hovertext=texts, hoverinfo="text", showlegend=False,
+            ))
+        else:
+            fig.add_trace(go.Scatterpolar(**trace_kwargs))
     fig.update_layout(
         polar=dict(
             bgcolor="rgba(0,0,0,0)",
@@ -203,3 +165,107 @@ def percentile_scale(df, cols, player_row):
         pct = (df[c] <= val).mean() * 100
         out.append(round(float(pct), 1))
     return out
+
+
+def _reverse_if_needed(stat, higher_is_better):
+    """For a 'lower is better' metric, flips percentile/zscore so a favorable raw value always
+    reads as a high percentile / positive z-score, without touching the raw value itself."""
+    if higher_is_better or stat["percentile"] is None:
+        return stat
+    stat = dict(stat)
+    stat["percentile"] = round(100 - stat["percentile"], 1)
+    if stat["zscore"] is not None:
+        stat["zscore"] = round(-stat["zscore"], 2)
+    return stat
+
+
+def metric_stats(df, cols, player_row, higher_is_better=True):
+    """Per column: {raw, percentile, zscore} against df's distribution for that column.
+
+    percentile uses the exact same (series <= val).mean()*100 definition as percentile_scale,
+    so radar r-values built from this function's percentiles match percentile_scale exactly.
+    zscore is computed against the same comparison population/column as the percentile, using
+    that column's own mean/std within df. Any of the three is None when it can't be computed
+    (column missing, no data, player's value missing, or zero variance for zscore).
+    Pass higher_is_better=False for a metric where a lower raw value is the better outcome (e.g.
+    goals conceded) - percentile/zscore are flipped so "better" always reads as higher/positive.
+    """
+    out = []
+    for c in cols:
+        if c not in df.columns or df[c].dropna().empty:
+            out.append({"raw": None, "percentile": None, "zscore": None})
+            continue
+        val = player_row.get(c, np.nan)
+        if isinstance(val, float) and np.isnan(val):
+            out.append({"raw": None, "percentile": None, "zscore": None})
+            continue
+        series = df[c].dropna()
+        pct = round(float((series <= val).mean() * 100), 1)
+        std = series.std()
+        zscore = round(float((val - series.mean()) / std), 2) if std and std > 0 else None
+        out.append(_reverse_if_needed({"raw": float(val), "percentile": pct, "zscore": zscore}, higher_is_better))
+    return out
+
+
+def value_stats(population, player_value, higher_is_better=True):
+    """{raw, percentile, zscore} of player_value within an arbitrary pre-built population Series -
+    e.g. one per-90 rate per player, rather than one raw value per row. Same percentile/zscore
+    definitions as metric_stats, just against a caller-supplied distribution instead of a df column.
+    Pass higher_is_better=False for a metric where a lower raw value is the better outcome.
+    """
+    if (population is None or population.empty or player_value is None
+            or (isinstance(player_value, float) and np.isnan(player_value))):
+        return {"raw": None, "percentile": None, "zscore": None}
+    pct = round(float((population <= player_value).mean() * 100), 1)
+    std = population.std()
+    zscore = round(float((player_value - population.mean()) / std), 2) if std and std > 0 else None
+    return _reverse_if_needed({"raw": float(player_value), "percentile": pct, "zscore": zscore}, higher_is_better)
+
+
+def player_per90(rows_df, col, minutes_col="PLAYDURATION"):
+    """A single player's own per-90 rate over rows_df (their selected match, or all their
+    matches): sum(col) / (sum(minutes)/60) * 90 - a ratio of totals, not an average of
+    per-match rates, so it's not skewed by short-minute appearances."""
+    total_minutes = rows_df[minutes_col].sum()
+    if total_minutes <= 0:
+        return None
+    return float(rows_df[col].sum()) / (total_minutes / 60) * 90
+
+
+def population_per90(df, col, minutes_col="PLAYDURATION", min_total_minutes=0):
+    """One row per player (grouped by 'playerName'): sum(col)/sum(minutes)*90 across their
+    full history in df. minutes_col is assumed to be in SECONDS (this app's PLAYDURATION
+    convention); min_total_minutes is in MINUTES and excludes players whose total minutes in
+    df fall below that floor, so a handful of substitute-appearance minutes can't produce an
+    extreme, misleading per-90 outlier in the comparison population."""
+    sums = df.groupby("playerName")[col].sum()
+    total_minutes = df.groupby("playerName")[minutes_col].sum() / 60
+    valid = total_minutes >= max(min_total_minutes, 1e-9)
+    return sums[valid] / total_minutes[valid] * 90
+
+
+def ordinal(n):
+    n = int(round(n))
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def fmt_zscore(z):
+    if z is None:
+        return "N/A"
+    sign = "+" if z >= 0 else "−"
+    return f"{sign}{abs(z):.2f}"
+
+
+def radar_hover_text(stat, value_fmt, player_name=None):
+    """Builds the standard 'Player value / Percentile / Z-score' hover string for one radar
+    axis. Pass player_name to prefix it with the player's name (for multi-player radars where
+    the tooltip needs to identify whose point it is)."""
+    raw_str = value_fmt(stat["raw"]) if stat["raw"] is not None else "N/A"
+    pct_str = f"{ordinal(stat['percentile'])} percentile" if stat["percentile"] is not None else "N/A"
+    z_str = fmt_zscore(stat["zscore"]) if stat["percentile"] is not None else "N/A"
+    prefix = f"{player_name}<br>" if player_name else ""
+    return f"{prefix}Player value: {raw_str}<br>Percentile: {pct_str}<br>Z-score: {z_str}"

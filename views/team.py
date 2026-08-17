@@ -4,7 +4,7 @@ import plotly.express as px
 import streamlit as st
 
 from utils.data_loader import (
-    load_playermatchstats, load_physical, get_teams, resolve_columns,
+    load_playermatchstats, load_physical, get_teams, resolve_columns, match_team_name,
     PHYSICAL_COLUMN_CANDIDATES, METRIC_LABELS, POSITION_LABELS_PL,
     ZONE_ORDER, ZONE_LABELS_PL, LANE_ORDER, LANE_LABELS_PL, zone_grid_from_marginals,
 )
@@ -61,9 +61,13 @@ with left:
         fig = px.bar(ranking.sort_values(metric_col), x=metric_col, y="playerName", orientation="h",
                       text=ranking.sort_values(metric_col)[metric_col].round(2),
                       title=f"{metric_label} — {team_choice}")
-        fig.update_traces(marker_color=COLORS["accent"], textposition="outside", cliponaxis=False)
-        fig.update_layout(yaxis_title="", xaxis_title=metric_label)
-        apply_plotly_theme(fig, height=420, show_legend=False)
+        fig.update_traces(marker_color=COLORS["accent"], textposition="outside", cliponaxis=False,
+                           textfont_size=15)
+        fig.update_layout(yaxis_title="", xaxis_title=metric_label, bargap=0.3)
+        fig.update_yaxes(tickfont=dict(size=14.5), automargin=True)
+        apply_plotly_theme(fig, height=520, show_legend=False)
+        fig.update_layout(margin=dict(l=4, r=10, t=50, b=10),
+                            title=dict(x=0.01, xanchor="left"))
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
 
 with right:
@@ -98,18 +102,36 @@ roster = roster.rename(columns={
 st.dataframe(roster.sort_values("Goals", ascending=False), width='stretch', hide_index=True)
 
 physical = load_physical()
+section_divider("Team physicals (physical.csv)")
 if not physical.empty:
     colmap = resolve_columns(physical, PHYSICAL_COLUMN_CANDIDATES)
     squad_col = colmap.get("squadName")
-    if squad_col and team_choice in physical[squad_col].values:
-        section_divider("Team physicals (physical.csv)")
-        t_phys = physical[physical[squad_col] == team_choice]
-        dist_col, hsr_col, name_col = colmap.get("totalDistanceM"), colmap.get("hsrDistanceM"), colmap.get("playerName")
-        if dist_col and name_col:
-            agg_phys = t_phys.groupby(name_col, as_index=False)[[c for c in [dist_col, hsr_col] if c]].mean()
-            fig = px.bar(agg_phys.sort_values(dist_col), x=dist_col, y=name_col, orientation="h",
-                          title="Average distance per match (m)")
-            fig.update_traces(marker_color=COLORS["accent_4"])
-            fig.update_layout(yaxis_title="", xaxis_title="meters")
-            apply_plotly_theme(fig, height=380, show_legend=False)
-            st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
+    dist_col, hsr_col, name_col = colmap.get("totalDistanceM"), colmap.get("hsrDistanceM"), colmap.get("playerName")
+
+    matched_phys_team = None
+    if squad_col:
+        phys_team_names = physical[squad_col].dropna().unique().tolist()
+        matched_phys_team = match_team_name(team_choice, phys_team_names)
+
+    if matched_phys_team and dist_col and name_col:
+        t_phys = physical[physical[squad_col] == matched_phys_team]
+        agg_phys = t_phys.groupby(name_col, as_index=False)[[c for c in [dist_col, hsr_col] if c]].mean()
+        agg_phys["dist_km"] = agg_phys[dist_col] / 1000
+        agg_phys = agg_phys.sort_values("dist_km")
+        n_rows = len(agg_phys)
+        fig = px.bar(agg_phys, x="dist_km", y=name_col, orientation="h",
+                      text=[f"{v:.1f} km" for v in agg_phys["dist_km"]],
+                      title="Average distance per match (km)")
+        fig.update_traces(marker_color=COLORS["accent_4"], textposition="outside", cliponaxis=False,
+                           textfont_size=14)
+        fig.update_layout(yaxis_title="", xaxis_title="km", bargap=0.25)
+        fig.update_yaxes(tickfont=dict(size=14), automargin=True)
+        fig.update_xaxes(dtick=2)
+        apply_plotly_theme(fig, height=max(400, 29 * n_rows + 100), show_legend=False)
+        fig.update_layout(margin=dict(l=4, r=10, t=50, b=10),
+                            title=dict(x=0.01, xanchor="left", font=dict(size=15.5)))
+        st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
+    else:
+        st.caption(f"No physical-tracking data available for {team_choice}.")
+else:
+    st.info("`physical.csv` not found.")

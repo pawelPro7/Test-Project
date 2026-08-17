@@ -5,14 +5,14 @@ import streamlit as st
 from utils.data_loader import (
     load_playermatchstats, load_physical, data_status, resolve_columns, PHYSICAL_COLUMN_CANDIDATES,
 )
-from utils.styling import page_header, section_divider, kpi_card, apply_plotly_theme, COLORS
+from utils.styling import page_header, section_divider, subheader, kpi_card, apply_plotly_theme, COLORS
 
 pms = load_playermatchstats()
 status = data_status()
 
 page_header(
-    eyebrow="Season 25/26 · Analytics dashboard",
-    title="League overview",
+    eyebrow="Championship Season 25/26 · Analytics dashboard",
+    title="League Overview",
     subtitle="Statistics, heatmaps and player comparisons based on files in the data/ folder.",
 )
 
@@ -33,15 +33,162 @@ if pms.empty:
     st.error("`data/playermatchstats.csv` not found. Upload a file with the required structure and refresh the page.")
     st.stop()
 
-if not status["physical"]["ok"] or not status["events"]["ok"]:
-    with st.expander("ℹ️ Note on physical.csv / events.csv — assumed data schema", expanded=False):
+if not status["physical"]["ok"]:
+    with st.expander("ℹ️ Note on physical.csv — assumed data schema", expanded=False):
         st.markdown(
-            "The structure of these two files could not be unambiguously confirmed when building the app "
-            "(sample inputs were identical to playermatchstats.csv), so the loader assumes a typical schema "
-            "for this data class (physical: distance, sprints, speed; events: type, x/y coordinates, xG) and "
-            "matches columns flexibly (case-insensitive). Replace the files in `data/` with your full exports — "
-            "if column names differ, update the candidate lists in `utils/data_loader.py` (`PHYSICAL_COLUMN_CANDIDATES` / `EVENTS_COLUMN_CANDIDATES`)."
+            "The structure of this file could not be unambiguously confirmed when building the app, "
+            "so the loader assumes a typical schema for this data class (distance, sprints, speed) and "
+            "matches columns flexibly (case-insensitive). Replace the file in `data/` with your full export — "
+            "if column names differ, update the candidate list in `utils/data_loader.py` (`PHYSICAL_COLUMN_CANDIDATES`)."
         )
+
+
+def _fmt(value, decimals=1, suffix=""):
+    return f"{value:.{decimals}f}{suffix}" if pd.notna(value) else "—"
+
+
+def _vs_team_heading(prefix, team_name):
+    """'{prefix} vs {team_name}' with only team_name colored light blue; rest inherits the caller's color."""
+    return f'{prefix} vs <span style="color:{COLORS["accent_3"]};">{team_name}</span>'
+
+
+def _profile_metrics(df):
+    """Attacking / possession / defensive rates for any subset of playermatchstats rows.
+
+    Count-based figures (goals, xG, pressures, ball wins/losses, SCA, progressive passing
+    value) are normalized per TEAM-match, not per match: a match has two teams' worth of
+    rows, so dividing a league-wide sum by the match count would silently combine both
+    sides' totals — inflating the "league average" to roughly double what any single team
+    actually produces, and making it not directly comparable to a one-team figure like
+    Coventry's own average. Ratio metrics (conversion %, accuracy %) don't have this
+    problem since they're already totals-over-totals regardless of how many teams are in df.
+    """
+    team_matches = df.drop_duplicates(["matchId", "squadName"]).shape[0]
+    total_g = int(df["GOALS"].sum()) if "GOALS" in df.columns else 0
+    total_s = int(df["SHOT_AT_GOAL_NUMBER"].sum()) if "SHOT_AT_GOAL_NUMBER" in df.columns else 0
+    m = {
+        "goals_per_match": total_g / max(team_matches, 1),
+        "xg_per_match": df["SHOT_XG"].sum() / max(team_matches, 1) if "SHOT_XG" in df.columns else float("nan"),
+        "shot_conversion": (total_g / total_s * 100) if total_s > 0 else float("nan"),
+        "shots_on_target": float("nan"),
+        "pass_accuracy": float("nan"),
+        "passing_under_pressure": float("nan"),
+    }
+    if {"SHOT_AT_GOAL_NUMBER_ON_TARGET", "SHOT_AT_GOAL_NUMBER"}.issubset(df.columns) and total_s > 0:
+        m["shots_on_target"] = df["SHOT_AT_GOAL_NUMBER_ON_TARGET"].sum() / total_s * 100
+    if {"SUCCESSFUL_PASSES", "UNSUCCESSFUL_PASSES"}.issubset(df.columns):
+        s, u = df["SUCCESSFUL_PASSES"].sum(), df["UNSUCCESSFUL_PASSES"].sum()
+        m["pass_accuracy"] = s / (s + u) * 100 if (s + u) > 0 else float("nan")
+    if {"SUCCESSFUL_PASSES_UNDER_PRESSURE", "PASSES_UNDER_PRESSURE"}.issubset(df.columns):
+        sp, tp = df["SUCCESSFUL_PASSES_UNDER_PRESSURE"].sum(), df["PASSES_UNDER_PRESSURE"].sum()
+        m["passing_under_pressure"] = sp / tp * 100 if tp > 0 else float("nan")
+    m["prog_passing_value90"] = (df["PXT_PASS_PRO"].sum() / team_matches
+                                   if "PXT_PASS_PRO" in df.columns and team_matches > 0 else float("nan"))
+    m["sca90"] = (df["SHOT_CREATING_ACTIONS"].sum() / team_matches
+                   if "SHOT_CREATING_ACTIONS" in df.columns and team_matches > 0 else float("nan"))
+    m["pressures90"] = (df["NUMBER_OF_PRESSURES_EVENT"].sum() / team_matches
+                          if "NUMBER_OF_PRESSURES_EVENT" in df.columns and team_matches > 0 else float("nan"))
+    m["recoveries90"] = (df["BALL_WIN_NUMBER"].sum() / team_matches
+                           if "BALL_WIN_NUMBER" in df.columns and team_matches > 0 else float("nan"))
+    m["ball_losses90"] = (df["BALL_LOSS_NUMBER"].sum() / team_matches
+                            if "BALL_LOSS_NUMBER" in df.columns and team_matches > 0 else float("nan"))
+    return m
+
+
+def _high_intensity_per90(physical_df, colmap, team_name=None):
+    """League-wide, or single-team (substring match on squad name), high-intensity actions per team-match.
+
+    Uses physical.csv's own match_id + team-name columns to count team-matches directly
+    (same per-team-match normalization as _profile_metrics), rather than dividing by total
+    player-minutes, which would average across however many players physical.csv happens
+    to track per match rather than giving a whole-team total.
+    """
+    if physical_df.empty:
+        return float("nan")
+    hi_col = colmap.get("highIntensityActions")
+    squad_col = colmap.get("squadName")
+    match_col = colmap.get("matchId")
+    if not hi_col or not squad_col or not match_col:
+        return float("nan")
+    sub = physical_df
+    if team_name is not None:
+        sub = physical_df[physical_df[squad_col].astype(str).str.contains(team_name, case=False, na=False)]
+        if sub.empty:
+            return float("nan")
+    team_matches = sub.drop_duplicates([match_col, squad_col]).shape[0]
+    return sub[hi_col].sum() / team_matches if team_matches > 0 else float("nan")
+
+
+def _compare_sign(league_val, team_val, higher_is_better):
+    """(sign, color) pointing toward whichever side is the better performer — league (left) or
+    Coventry (right) — not literal numeric magnitude. '<' + green means Coventry is better;
+    '>' + red means the league average is better. For a lower-is-better metric (e.g. ball
+    losses), Coventry having the smaller number still renders as '<' + green, even though that's
+    not a true numeric inequality read left-to-right.
+    """
+    if pd.isna(league_val) or pd.isna(team_val):
+        return "—", COLORS["text_muted"]
+    if abs(team_val - league_val) < 1e-9:
+        return "=", COLORS["text_muted"]
+    team_higher = team_val > league_val
+    team_better = team_higher if higher_is_better else not team_higher
+    return ("<", COLORS["accent_4"]) if team_better else (">", COLORS["accent_2"])
+
+
+def _compare_card(label, league_str, team_str, sign, sign_color):
+    return f"""
+    <div class="kpi-card">
+        <div class="kpi-label">{label}</div>
+        <div class="kpi-compare-row">
+            <span class="kpi-compare-league">{league_str}</span>
+            <span class="kpi-compare-sign" style="color:{sign_color};">{sign}</span>
+            <span class="kpi-compare-team">{team_str}</span>
+        </div>
+    </div>
+    """
+
+
+def _render_group(subheader_label, specs, metrics):
+    subheader(subheader_label)
+    cols = st.columns(4)
+    for col, (key, label, dec, suffix, _) in zip(cols, specs):
+        with col:
+            st.markdown(kpi_card(label, _fmt(metrics.get(key, float("nan")), dec, suffix)), unsafe_allow_html=True)
+
+
+def _render_compare_group(subheader_label, specs, league_metrics, team_metrics):
+    subheader(_vs_team_heading(subheader_label, COMPARE_TEAM), color=COLORS["text"])
+    cols = st.columns(4)
+    for col, (key, label, dec, suffix, higher_is_better) in zip(cols, specs):
+        league_val = league_metrics.get(key, float("nan"))
+        team_val = team_metrics.get(key, float("nan"))
+        sign, sign_color = _compare_sign(league_val, team_val, higher_is_better)
+        with col:
+            st.markdown(
+                _compare_card(label, _fmt(league_val, dec, suffix), _fmt(team_val, dec, suffix), sign, sign_color),
+                unsafe_allow_html=True,
+            )
+
+
+ATTACKING_SPECS = [
+    ("goals_per_match", "Goals / match", 2, "", True),
+    ("xg_per_match", "xG / match", 2, "", True),
+    ("shot_conversion", "Shot conversion", 1, "%", True),
+    ("shots_on_target", "Shots on target", 1, "%", True),
+]
+POSSESSION_SPECS = [
+    ("pass_accuracy", "Pass accuracy", 1, "%", True),
+    ("passing_under_pressure", "Passing under pressure", 1, "%", True),
+    ("prog_passing_value90", "Progressive passing value / 90", 3, "", True),
+    ("sca90", "Shot-creating actions / 90", 1, "", True),
+]
+DEFENSIVE_SPECS = [
+    ("pressures90", "Pressures / 90", 1, "", True),
+    ("recoveries90", "Ball recoveries / 90", 1, "", True),
+    ("ball_losses90", "Ball losses / 90", 1, "", False),
+    ("hi_per90", "High-intensity actions / 90", 1, "", True),
+]
+
 
 # ---------------------------------------------------------------- KPI
 n_matches = pms["matchId"].nunique()
@@ -63,10 +210,11 @@ with k2:
 with k3:
     st.markdown(kpi_card("Teams", f"{n_teams}"), unsafe_allow_html=True)
 with k4:
-    st.markdown(kpi_card("Goals", f"{total_goals}", f"{goals_per_match:.2f} goals / match"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Goals", f"{total_goals}", f"{goals_per_match:.2f} combined goals / match"),
+                unsafe_allow_html=True)
 with k5:
     st.markdown(
-        kpi_card("Shot conversion", f"{shot_conversion:.1f}%" if pd.notna(shot_conversion) else "—",
+        kpi_card("Shot conversion", _fmt(shot_conversion, 1, "%"),
                   f"{total_goals} goals / {total_shots} shots"),
         unsafe_allow_html=True,
     )
@@ -81,9 +229,10 @@ with lead_col1:
                    .query("GOALS > 0").sort_values("GOALS", ascending=False).head(8))
     if not top_scorers.empty:
         fig = px.bar(top_scorers.sort_values("GOALS"), x="GOALS", y="playerName", orientation="h",
-                      title="Top scorers", text="GOALS")
+                      title="Top Scorers", text="GOALS")
         fig.update_traces(marker_color=COLORS["accent"], textposition="outside", cliponaxis=False)
         fig.update_layout(yaxis_title="", xaxis_title="")
+        fig.update_xaxes(range=[0, top_scorers["GOALS"].max() * 1.2])
         apply_plotly_theme(fig, height=320, show_legend=False)
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
     else:
@@ -94,9 +243,10 @@ with lead_col2:
                    .query("ASSISTS > 0").sort_values("ASSISTS", ascending=False).head(8))
     if not top_assists.empty:
         fig = px.bar(top_assists.sort_values("ASSISTS"), x="ASSISTS", y="playerName", orientation="h",
-                      title="Most assists", text="ASSISTS")
+                      title="Most Assists", text="ASSISTS")
         fig.update_traces(marker_color=COLORS["accent_3"], textposition="outside", cliponaxis=False)
         fig.update_layout(yaxis_title="", xaxis_title="")
+        fig.update_xaxes(range=[0, top_assists["ASSISTS"].max() * 1.2])
         apply_plotly_theme(fig, height=320, show_legend=False)
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
     else:
@@ -107,9 +257,10 @@ with lead_col3:
                    .sort_values("SHOT_XG", ascending=False).head(8))
     if not top_shot_xg.empty and top_shot_xg["SHOT_XG"].sum() > 0:
         fig = px.bar(top_shot_xg.sort_values("SHOT_XG"), x="SHOT_XG", y="playerName", orientation="h",
-                      title="Most Shot xG", text=top_shot_xg.sort_values("SHOT_XG")["SHOT_XG"].round(2))
+                      title="Shot xG (total)", text=top_shot_xg.sort_values("SHOT_XG")["SHOT_XG"].round(2))
         fig.update_traces(marker_color=COLORS["accent_4"], textposition="outside", cliponaxis=False)
         fig.update_layout(yaxis_title="", xaxis_title="")
+        fig.update_xaxes(range=[0, top_shot_xg["SHOT_XG"].max() * 1.2])
         apply_plotly_theme(fig, height=320, show_legend=False)
         st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
     else:
@@ -117,69 +268,32 @@ with lead_col3:
 
 # ---------------------------------------------------------------- League profile
 section_divider("League profile")
-st.caption(
-    "League-wide rates computed from totals (not averaged per player), so a player with 100 shots "
-    "counts as much as one with a single shot. Home/away win rates aren't shown because the data has "
-    "no reliable home/away indicator for each match."
-)
 
+COMPARE_TEAM = "Coventry City"
 
-def _fmt(value, decimals=1, suffix=""):
-    return f"{value:.{decimals}f}{suffix}" if pd.notna(value) else "—"
-
-
-total_90s = pms["PLAYDURATION"].sum() / 5400 if "PLAYDURATION" in pms.columns else float("nan")
-xg_per_match = pms["SHOT_XG"].sum() / max(n_matches, 1) if "SHOT_XG" in pms.columns else float("nan")
-
-if {"WON_AERIAL_DUELS", "LOST_AERIAL_DUELS"}.issubset(pms.columns):
-    won_aer, lost_aer = pms["WON_AERIAL_DUELS"].sum(), pms["LOST_AERIAL_DUELS"].sum()
-    aerial_pct = won_aer / (won_aer + lost_aer) * 100 if (won_aer + lost_aer) > 0 else float("nan")
-else:
-    aerial_pct = float("nan")
-
-pressures_per90 = (pms["NUMBER_OF_PRESSURES_EVENT"].sum() / total_90s
-                    if "NUMBER_OF_PRESSURES_EVENT" in pms.columns and total_90s > 0 else float("nan"))
-pxt_pro_per90 = (pms["PXT_PASS_PRO"].sum() / total_90s
-                  if "PXT_PASS_PRO" in pms.columns and total_90s > 0 else float("nan"))
-ball_loss_per90 = (pms["BALL_LOSS_NUMBER"].sum() / total_90s
-                    if "BALL_LOSS_NUMBER" in pms.columns and total_90s > 0 else float("nan"))
-
-hi_per90 = float("nan")
+league_metrics = _profile_metrics(pms)
 physical = load_physical()
-if not physical.empty:
-    phys_colmap = resolve_columns(physical, PHYSICAL_COLUMN_CANDIDATES)
-    hi_col, min_col = phys_colmap.get("highIntensityActions"), phys_colmap.get("minutesPlayed")
-    if hi_col and min_col:
-        total_minutes = physical[min_col].sum()
-        if total_minutes > 0:
-            hi_per90 = physical[hi_col].sum() / (total_minutes / 90)
+phys_colmap = resolve_columns(physical, PHYSICAL_COLUMN_CANDIDATES) if not physical.empty else {}
+league_metrics["hi_per90"] = _high_intensity_per90(physical, phys_colmap)
 
-p1, p2, p3, p4 = st.columns(4)
-with p1:
-    st.markdown(kpi_card("Goals / match", _fmt(goals_per_match, 2)), unsafe_allow_html=True)
-with p2:
-    st.markdown(kpi_card("xG / match", _fmt(xg_per_match, 2)), unsafe_allow_html=True)
-with p3:
-    st.markdown(kpi_card("Shot conversion", _fmt(shot_conversion, 1, "%")), unsafe_allow_html=True)
-with p4:
-    st.markdown(kpi_card("Aerial-duel success", _fmt(aerial_pct, 1, "%")), unsafe_allow_html=True)
+_render_group("Attacking (league average)", ATTACKING_SPECS, league_metrics)
+_render_group("Possession & passing (league average)", POSSESSION_SPECS, league_metrics)
+_render_group("Defensive & physical (league average)", DEFENSIVE_SPECS, league_metrics)
 
-p5, p6, p7, p8 = st.columns(4)
-with p5:
-    st.markdown(kpi_card("Pressures / 90", _fmt(pressures_per90, 1)), unsafe_allow_html=True)
-with p6:
-    st.markdown(
-        kpi_card("High-intensity actions / 90", _fmt(hi_per90, 1),
-                  "from physical.csv" if pd.notna(hi_per90) else "physical.csv has no matching columns"),
-        unsafe_allow_html=True,
-    )
-with p7:
-    st.markdown(kpi_card("Progressive passing value", _fmt(pxt_pro_per90, 3), "PXT_PASS_PRO / 90"),
-                unsafe_allow_html=True)
-with p8:
-    st.markdown(kpi_card("Ball losses / 90", _fmt(ball_loss_per90, 1)), unsafe_allow_html=True)
+tcol1, _, _, _ = st.columns(4)
+with tcol1:
+    compare_on = st.toggle(f"Compare vs {COMPARE_TEAM}", key="compare_coventry")
 
-st.caption(
-    "Tip: the **Player** and **Team** pages in the left menu have their own selectors, "
-    "and the **Heatmaps** and **Comparison** pages allow comparing multiple players at once."
-)
+if compare_on:
+    team_df = pms[pms["squadName"] == COMPARE_TEAM]
+    if team_df.empty:
+        st.warning(f"No `{COMPARE_TEAM}` rows found in `playermatchstats.csv`.")
+    else:
+        st.write("")
+        section_divider(_vs_team_heading("League Profile", COMPARE_TEAM), color=COLORS["text"])
+        team_metrics = _profile_metrics(team_df)
+        team_metrics["hi_per90"] = _high_intensity_per90(physical, phys_colmap, team_name=COMPARE_TEAM)
+
+        _render_compare_group("Attacking (league average)", ATTACKING_SPECS, league_metrics, team_metrics)
+        _render_compare_group("Possession & passing (league average)", POSSESSION_SPECS, league_metrics, team_metrics)
+        _render_compare_group("Defensive & physical (league average)", DEFENSIVE_SPECS, league_metrics, team_metrics)
