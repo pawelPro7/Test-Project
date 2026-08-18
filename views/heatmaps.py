@@ -1,14 +1,12 @@
-import numpy as np
-import pandas as pd
 import streamlit as st
 
 from utils.data_loader import (
-    load_playermatchstats, load_events, get_teams, get_players, resolve_columns,
-    EVENTS_COLUMN_CANDIDATES, ZONE_ORDER, ZONE_LABELS_PL, LANE_ORDER, LANE_LABELS_PL,
-    zone_grid_from_marginals,
+    load_playermatchstats, get_teams, get_players,
+    ZONE_ORDER, ZONE_LABELS_PL, LANE_ORDER, LANE_LABELS_PL,
+    POSITION_LABELS_PL, zone_grid_from_marginals,
 )
 from utils.styling import page_header, section_divider, COLORS
-from utils.viz import zone_heatmap_figure, event_heatmap_figure, shot_map_figure, normalize_xy
+from utils.viz import zone_heatmap_figure
 
 pms = load_playermatchstats()
 if pms.empty:
@@ -18,7 +16,7 @@ if pms.empty:
 page_header(
     eyebrow="Spatial analysis",
     title="Heatmaps",
-    subtitle="Activity zones based on playermatchstats.csv and — if available — real event maps from events.csv.",
+    subtitle="Activity zones based on playermatchstats.csv.",
 )
 
 ZONE_METRIC_FAMILIES = {
@@ -53,8 +51,15 @@ if available_families and metric_family in available_families:
     pitch_counts = [subset[pitch_tpl.format(z=z)].sum() for z in ZONE_ORDER]
     lane_counts = [subset[lane_tpl.format(l=l)].sum() for l in LANE_ORDER]
     grid = zone_grid_from_marginals(pitch_counts, lane_counts)
+
+    title = f"{metric_family} — {target}"
+    if scope == "Player" and not subset.empty and "position" in subset.columns:
+        most_common_position = subset["position"].mode().iloc[0]
+        position_label = POSITION_LABELS_PL.get(most_common_position, most_common_position)
+        title = f"{title} ({position_label})"
+
     fig = zone_heatmap_figure(grid, [ZONE_LABELS_PL[z] for z in ZONE_ORDER], [LANE_LABELS_PL[l] for l in LANE_ORDER],
-                                title=f"{metric_family} — {target}", height=480, color=color)
+                                title=title, height=480, color=color)
     st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
     st.caption(
         "The grid is the product of two independent marginal distributions (zone × corridor), "
@@ -63,70 +68,3 @@ if available_families and metric_family in available_families:
     )
 else:
     st.info("The loaded playermatchstats.csv file does not contain a complete set of zone columns for any supported metric.")
-
-# ---------------------------------------------------------------- Events (real x/y)
-events = load_events()
-section_divider("Event map (events.csv)")
-
-if events.empty:
-    st.info("No `data/events.csv` file — this section will appear automatically when the file is available in the data/ folder.")
-else:
-    colmap = resolve_columns(events, EVENTS_COLUMN_CANDIDATES)
-    x_col, y_col = colmap.get("x"), colmap.get("y")
-    if not x_col or not y_col:
-        st.warning(
-            "Could not identify the coordinate columns (x/y) in events.csv. "
-            "Map them manually in `utils/data_loader.py` → `EVENTS_COLUMN_CANDIDATES` if your file uses different names."
-        )
-    else:
-        e1, e2, e3 = st.columns([1, 1, 1.4])
-        with e1:
-            ev_scope = st.radio("Scope", ["Player", "Team", "All"], horizontal=True, key="ev_scope")
-        name_col, squad_col = colmap.get("playerName"), colmap.get("squadName")
-        ev_target = None
-        with e2:
-            if ev_scope == "Player" and name_col:
-                ev_target = st.selectbox("Player", sorted(events[name_col].dropna().unique()), key="ev_player")
-            elif ev_scope == "Team" and squad_col:
-                ev_target = st.selectbox("Team", sorted(events[squad_col].dropna().unique()), key="ev_team")
-        type_col = colmap.get("eventType")
-        with e3:
-            if type_col:
-                types = sorted(events[type_col].dropna().unique())
-                chosen_types = st.multiselect("Event types", types, default=types, key="ev_types")
-            else:
-                chosen_types = None
-
-        sub = events.copy()
-        if ev_scope == "Player" and name_col and ev_target:
-            sub = sub[sub[name_col] == ev_target]
-        elif ev_scope == "Team" and squad_col and ev_target:
-            sub = sub[sub[squad_col] == ev_target]
-        if type_col and chosen_types is not None:
-            sub = sub[sub[type_col].isin(chosen_types)]
-
-        if sub.empty:
-            st.info("No events for the selected filters.")
-        else:
-            xmax = pd.to_numeric(events[x_col], errors="coerce").max()
-            x_norm = normalize_xy(pd.to_numeric(sub[x_col], errors="coerce"), xmax)
-            y_norm = normalize_xy(pd.to_numeric(sub[y_col], errors="coerce"), xmax)
-            label = ev_target if ev_target else "all events"
-            fig = event_heatmap_figure(x_norm, y_norm, title=f"Event map — {label}", height=480)
-            st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
-            st.caption(f"Map built from {len(sub)} events with real coordinates (columns `{x_col}` / `{y_col}`).")
-
-            shot_mask = sub[type_col].astype(str).str.contains("shot", case=False, na=False) if type_col else pd.Series(False, index=sub.index)
-            if shot_mask.any():
-                section_divider("Shot map")
-                shots = sub[shot_mask].copy()
-                xg_col, outcome_col = colmap.get("xG"), colmap.get("outcome")
-                xg_vals = pd.to_numeric(shots[xg_col], errors="coerce") if xg_col else pd.Series(np.nan, index=shots.index)
-                outcome_flag = shots[outcome_col].astype(str).str.upper().str.contains("SUCCESS") if outcome_col else pd.Series(False, index=shots.index)
-                sx = normalize_xy(pd.to_numeric(shots[x_col], errors="coerce"), xmax)
-                sy = normalize_xy(pd.to_numeric(shots[y_col], errors="coerce"), xmax)
-                fig2 = shot_map_figure(sx, sy, xg_vals, outcome_flag, height=460, title=f"Shots — {label}")
-                st.plotly_chart(fig2, width='stretch', config={"displayModeBar": False})
-                st.caption(
-                    "Marker size ∝ shot xG. Color indicates action outcome according to the outcome column (shown as “success” vs others), not confirmed goals."
-                )

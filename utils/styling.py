@@ -163,6 +163,8 @@ def inject_global_css():
         text-transform: uppercase;
         letter-spacing: 0.07em;
         font-size: 0.7rem;
+        line-height: 1.3;
+        min-height: 2.6em;
         color: {COLORS["text_muted"]};
         margin-bottom: 6px;
     }}
@@ -176,7 +178,43 @@ def inject_global_css():
     .kpi-card .kpi-sub {{
         color: {COLORS["text_muted"]};
         font-size: 0.78rem;
+        line-height: 1.3;
+        min-height: 1.3em;
         margin-top: 6px;
+    }}
+    .kpi-compare-row {{
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        white-space: nowrap;
+        overflow: hidden;
+    }}
+    .kpi-compare-league, .kpi-compare-team {{
+        font-family: {FONT_MONO};
+        font-size: 1.25rem;
+        font-weight: 600;
+        line-height: 1;
+    }}
+    .kpi-compare-league {{ color: {COLORS["accent"]}; }}
+    .kpi-compare-team {{ color: {COLORS["accent_3"]}; }}
+    .kpi-compare-sign {{
+        font-family: {FONT_MONO};
+        font-size: 1.25rem;
+        font-weight: 800;
+        line-height: 1;
+    }}
+    .kpi-value-row {{
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        min-height: 3.4rem;
+    }}
+    .kpi-pct-badge {{
+        font-family: {FONT_MONO};
+        font-size: 1.2rem;
+        font-weight: 700;
+        line-height: 1;
     }}
     .player-card {{
         background: {COLORS["bg_card"]};
@@ -220,7 +258,7 @@ def inject_global_css():
         letter-spacing: 0.08em;
         text-transform: uppercase;
         font-size: 0.85rem;
-        color: {COLORS["text_muted"]};
+        color: {COLORS["text"]};
         white-space: nowrap;
     }}
     .data-pill {{
@@ -235,6 +273,97 @@ def inject_global_css():
     }}
     .data-pill.ok {{ color: {COLORS["accent_4"]}; border-color: {COLORS["accent_4"]}; }}
     .data-pill.warn {{ color: {COLORS["accent_2"]}; border-color: {COLORS["accent_2"]}; }}
+
+    .cmp-table-wrap {{
+        overflow-x: auto;
+        border: 1px solid {COLORS["border"]};
+        border-radius: 12px;
+        margin: 4px 0 18px 0;
+    }}
+    .cmp-table {{
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 560px;
+        font-family: {FONT_BODY};
+    }}
+    .cmp-table th, .cmp-table td {{
+        padding: 10px 14px;
+        border-bottom: 1px solid {COLORS["border"]};
+        text-align: center;
+        white-space: nowrap;
+    }}
+    .cmp-table thead th {{
+        background: {COLORS["bg_card"]};
+        font-family: {FONT_DISPLAY};
+        letter-spacing: 0.03em;
+        font-size: 0.92rem;
+        color: {COLORS["text"]};
+        text-align: center;
+        white-space: nowrap;
+        padding: 16px 18px;
+    }}
+    .cmp-table tbody tr:hover td {{ background: {COLORS["bg_card_hover"]}; }}
+    .cmp-table tbody tr:last-child td {{ border-bottom: none; }}
+    .cmp-row-label {{
+        text-align: left !important;
+        color: {COLORS["text_muted"]};
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }}
+    .cmp-swatch {{
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 7px;
+    }}
+    .cmp-header {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+    }}
+    .cmp-header-name {{
+        font-size: 1.02rem;
+        line-height: 1.3;
+        white-space: nowrap;
+    }}
+    .cmp-header-pos {{
+        font-family: {FONT_BODY};
+        text-transform: none;
+        letter-spacing: normal;
+        font-weight: 400;
+        font-size: 0.76rem;
+        color: {COLORS["text_muted"]};
+        white-space: nowrap;
+    }}
+    .cmp-cell {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        line-height: 1.35;
+    }}
+    .cmp-cell-raw {{
+        font-family: {FONT_MONO};
+        font-size: 1rem;
+        font-weight: 700;
+        color: {COLORS["text"]};
+    }}
+    .cmp-cell-pct {{
+        font-family: {FONT_MONO};
+        font-size: 0.74rem;
+        color: {COLORS["accent_3"]};
+    }}
+    .cmp-cell-z {{
+        font-family: {FONT_MONO};
+        font-size: 0.74rem;
+        color: {COLORS["text_muted"]};
+    }}
+    .cmp-cell-na {{
+        color: {COLORS["text_muted"]};
+        font-family: {FONT_MONO};
+        font-size: 0.85rem;
+    }}
 
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
@@ -270,13 +399,22 @@ def page_header(eyebrow: str, title: str, subtitle: str = ""):
     st.write("")
 
 
-def section_divider(label: str):
+def section_divider(label: str, color: str = None):
+    style = f' style="color:{color};"' if color else ""
     st.markdown(f"""
     <div class="section-divider">
-        <div class="label">{label}</div>
+        <div class="label"{style}>{label}</div>
         <div class="line"></div>
     </div>
     """, unsafe_allow_html=True)
+
+
+def subheader(label: str, color: str = None):
+    st.markdown(
+        f'<div style="font-family:\'Oswald\',sans-serif; letter-spacing:0.08em; text-transform:uppercase; '
+        f'font-size:0.82rem; color:{color or COLORS["text"]}; margin:10px 0 6px 0;">{label}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def kpi_card(label: str, value: str, sub: str = ""):

@@ -4,12 +4,11 @@ Data loading and preparation for the app.
 playermatchstats.csv has a confirmed, exact schema (verified against the sample
 provided by the user), so we reference its columns directly.
 
-physical.csv and events.csv did NOT have a confirmed schema when this app was
-built (the user uploaded the same file three times), so every access to their
-columns goes through find_column() - a flexible, case-insensitive column
-"matcher". If you replace these files with real exports that use different
-column names, just extend the candidate lists below (see
-PHYSICAL_COLUMN_CANDIDATES / EVENTS_COLUMN_CANDIDATES).
+physical.csv did NOT have a confirmed schema when this app was built (the user
+uploaded the same file three times), so every access to its columns goes
+through find_column() - a flexible, case-insensitive column "matcher". If you
+replace this file with a real export that uses different column names, just
+extend the candidate list below (see PHYSICAL_COLUMN_CANDIDATES).
 """
 from __future__ import annotations
 
@@ -35,10 +34,14 @@ LANE_LABELS_PL = {
 
 POSITION_LABELS_PL = {
     "GOALKEEPER": "Goalkeeper", "CENTRAL_DEFENDER": "Central defender",
+    "LEFT_WINGBACK_DEFENDER": "Left Wingback", "RIGHT_WINGBACK_DEFENDER": "Right Wingback",
+    "DEFENSE_MIDFIELD": "Defensive midfielder", "CENTRAL_MIDFIELD": "Central midfielder",
+    "ATTACKING_MIDFIELD": "Attacking midfielder", "RIGHT_WINGER": "Right winger",
+    "LEFT_WINGER": "Left winger", "CENTER_FORWARD": "Center forward",
+    # legacy/demo-data codes, kept for backward compatibility with generate_demo_data.py
     "FULLBACK_RIGHT": "Right-back", "FULLBACK_LEFT": "Left-back",
-    "DEFENSIVE_MIDFIELD": "Defensive midfielder", "CENTRAL_MIDFIELD": "Central midfielder",
-    "ATTACKING_MIDFIELD": "Attacking midfielder", "WINGER_RIGHT": "Right winger",
-    "WINGER_LEFT": "Left winger", "CENTER_FORWARD": "Center forward",
+    "DEFENSIVE_MIDFIELD": "Defensive midfielder", "WINGER_RIGHT": "Right winger",
+    "WINGER_LEFT": "Left winger",
 }
 
 # Key metrics used in the UI: display label -> data column name.
@@ -88,22 +91,6 @@ PHYSICAL_COLUMN_CANDIDATES = {
     "highIntensityActions": ["highIntensityActions", "high_intensity_actions", "hi_count_full_all"],
 }
 
-EVENTS_COLUMN_CANDIDATES = {
-    "matchId": ["matchId", "match_id"],
-    "playerId": ["playerId", "player_id"],
-    "playerName": ["playerName", "player_name", "name"],
-    "squadId": ["squadId", "squad_id", "teamId", "team_id"],
-    "squadName": ["squadName", "squad_name", "teamName", "team_name"],
-    "eventType": ["eventType", "event_type", "type"],
-    "outcome": ["outcome", "result", "success"],
-    "x": ["x", "X", "startX", "start_x", "posX", "locationX", "location_x"],
-    "y": ["y", "Y", "startY", "start_y", "posY", "locationY", "location_y"],
-    "endX": ["endX", "end_x", "toX"],
-    "endY": ["endY", "end_y", "toY"],
-    "minute": ["minute", "min"],
-    "xG": ["xG", "xg", "shotXg", "SHOT_XG"],
-}
-
 
 def find_column(df: pd.DataFrame, candidates) -> str | None:
     """Case-insensitive match of the first candidate column found in the list."""
@@ -119,6 +106,25 @@ def find_column(df: pd.DataFrame, candidates) -> str | None:
 def resolve_columns(df: pd.DataFrame, candidates_map: dict) -> dict:
     """Returns {logical_key: column_name_in_df or None} for the whole candidates map."""
     return {key: find_column(df, cands) for key, cands in candidates_map.items()}
+
+
+def _normalize_team_name(name: str) -> str:
+    """Lowercases and strips standalone 'FC'/'AFC' tokens so e.g. 'AFC Wrexham' and
+    'Wrexham FC' compare equal, without touching meaningful words like 'City'/'United'."""
+    tokens = [t for t in str(name).split() if t.upper() not in {"FC", "AFC"}]
+    return " ".join(tokens).strip().lower()
+
+
+def match_team_name(team_name: str, candidate_names) -> str | None:
+    """Finds the entry in candidate_names that refers to the same club as team_name,
+    tolerating different providers' naming conventions (exact match first, then a
+    normalized substring match). Returns None if nothing plausibly matches."""
+    target = _normalize_team_name(team_name)
+    for candidate in candidate_names:
+        norm = _normalize_team_name(candidate)
+        if target == norm or target in norm or norm in target:
+            return candidate
+    return None
 
 
 @st.cache_data(show_spinner=False)
@@ -155,6 +161,15 @@ def load_playermatchstats() -> pd.DataFrame:
             df["SUCCESSFUL_PASSES_UNDER_PRESSURE"] / df["PASSES_UNDER_PRESSURE"] * 100,
             np.nan,
         )
+    # Goalkeeper-specific derived metrics (Players Comparison page's goalkeeper radar).
+    if {"claims", "expected_claims"}.issubset(df.columns):
+        df["claims_vs_expected_pct"] = np.where(
+            df["expected_claims"] > 0, df["claims"] / df["expected_claims"] * 100, np.nan
+        )
+    if {"CONCEDED_POSTSHOT_XG", "CONCEDED_GOALS"}.issubset(df.columns):
+        # PSxG faced minus goals actually conceded: positive means the keeper prevented more
+        # goals than an average keeper would be expected to, given the quality of shots faced.
+        df["GOALS_PREVENTED"] = df["CONCEDED_POSTSHOT_XG"] - df["CONCEDED_GOALS"]
     return df.copy()
 
 
@@ -213,7 +228,8 @@ def aggregate_player(df: pd.DataFrame, player_name: str) -> pd.Series:
                              "SHOT_AT_GOAL_NUMBER", "BALL_WIN_NUMBER", "BALL_LOSS_NUMBER",
                              "OFFENSIVE_TOUCHES", "DEFENSIVE_TOUCHES", "SHOT_XG", "PACKING_XG",
                              "WON_GROUND_DUELS", "LOST_GROUND_DUELS", "WON_AERIAL_DUELS", "LOST_AERIAL_DUELS",
-                             "BYPASSED_OPPONENTS", "NUMBER_OF_FOULS", "NUMBER_OF_FOULS_WON"] if c in sub.columns]
+                             "BYPASSED_OPPONENTS", "NUMBER_OF_FOULS", "NUMBER_OF_FOULS_WON",
+                             "PLAYDURATION"] if c in sub.columns]
     out = sub[sum_cols].sum()
     out["MATCHES"] = len(sub)
     if {"SUCCESSFUL_PASSES", "UNSUCCESSFUL_PASSES"}.issubset(sub.columns):

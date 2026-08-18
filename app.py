@@ -31,8 +31,8 @@ comparison = st.Page("views/comparison.py", title="Players Comparison", icon="âš
 
 pg = st.navigation({"Menu": [home, player, team, heatmaps, comparison]})
 
-with st.sidebar:
-    st.markdown("---")
-    st.caption("Data is loaded from the `data/` folder. Replace the CSV files with your own exports and refresh the page.")
+prev_page_title = st.session_state.get("_current_page_title")
+st.session_state["_current_page_title"] = pg.title
+st.session_state["_navigated_to_new_page"] = prev_page_title != pg.title
 
 pg.run()
